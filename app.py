@@ -20,6 +20,18 @@ try:
         sheet_id = sheet_url
     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
     df = pd.read_csv(csv_url)
+    
+    # 列名（1行目）に含まれる余計な空白を自動削除
+    df.columns = df.columns.str.strip()
+    
+    # 見出し表記が「B列 (name)」などの場合にも対応させる処理
+    col_map = {}
+    for col in df.columns:
+        if 'name' in col: col_map['name'] = col
+        elif 'target' in col: col_map['target'] = col
+        elif 'current' in col: col_map['current'] = col
+        elif 'deadline' in col: col_map['deadline'] = col
+    
 except Exception as e:
     st.error("スプレッドシートの読み込みに失敗しました。URLと共有設定（リンクを知っている全員：編集者）を確認してください。")
     st.stop()
@@ -29,14 +41,24 @@ tab1, tab2 = st.tabs(["📊 進捗一覧・カウント", "⚙️ 期限・目�
 
 with tab1:
     st.subheader("現在の進捗状況")
+    
+    name_col = col_map.get('name', df.columns[1] if len(df.columns) > 1 else df.columns[0])
+    target_col = col_map.get('target', df.columns[2] if len(df.columns) > 2 else df.columns[0])
+    current_col = col_map.get('current', df.columns[3] if len(df.columns) > 3 else df.columns[0])
+    deadline_col = col_map.get('deadline', df.columns[4] if len(df.columns) > 4 else df.columns[0])
+
     for idx, row in df.iterrows():
         with st.container():
             cols = st.columns([3, 2, 2])
-            cols[0].markdown(f"**{row['name']}**")
-            cols[1].caption(f"期限: {row['deadline']}")
+            cols[0].markdown(f"**{row[name_col]}**")
+            cols[1].caption(f"期限: {row[deadline_col]}")
             
-            target = int(row['target'])
-            current = int(row['current'])
+            try:
+                target = int(row[target_col])
+                current = int(row[current_col])
+            except:
+                target, current = 1, 0
+                
             progress = min(current / target, 1.0) if target > 0 else 0
             
             st.progress(progress)
