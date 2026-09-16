@@ -1,5 +1,6 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
 st.set_page_config(page_title="病院実習 症例進捗チェッカー", layout="centered", initial_sidebar_state="collapsed")
 st.title("🩺 病院実習 症例進捗チェッカー")
@@ -12,8 +13,12 @@ def load_data():
 
 try:
     df = load_data()
+    # 必要な列が存在するかチェック＆数値型に変換
+    df["target"] = pd.to_numeric(df["target"], errors="coerce").fillna(0).astype(int)
+    df["current"] = pd.to_numeric(df["current"], errors="coerce").fillna(0).astype(int)
 except Exception as e:
     st.error("データの読み込みに失敗しました。Secretsの設定やスプレッドシートの共有設定を確認してください。")
+    st.write(e)
     st.stop()
 
 # タブの作成（進捗確認 と 設定・編集）
@@ -23,8 +28,8 @@ tab1, tab2 = st.tabs(["📊 進捗確認", "⚙️ 科目の追加・編集"])
 with tab1:
     st.subheader("現在の進捗状況")
     
-    total_target = df["目標ケース"].sum()
-    total_current = df["現在ケース"].sum()
+    total_target = df["target"].sum()
+    total_current = df["current"].sum()
     total_progress = (total_current / total_target) if total_target > 0 else 0.0
 
     st.metric("全体の達成率", f"{int(total_progress * 100)}%", f"{total_current} / {total_target} ケース")
@@ -32,18 +37,20 @@ with tab1:
     st.divider()
 
     for idx, row in df.iterrows():
-        dept = row["科名"]
-        target = int(row["目標ケース"])
-        current = int(row["現在ケース"])
+        dept = row.get("name", f"科目{idx}")
+        target = int(row["target"])
+        current = int(row["current"])
+        deadline = row.get("deadline", "")
         progress = (current / target) if target > 0 else 0.0
 
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.write(f"**{dept}** ({current} / {target})")
+            deadline_str = f" (締切: {deadline})" if pd.notna(deadline) and str(deadline).strip() != "" else ""
+            st.write(f"**{dept}**{deadline_str} ({current} / {target})")
             st.progress(min(progress, 1.0))
         with col2:
             if st.button("＋1", key=f"btn_{idx}"):
-                df.at[idx, "現在ケース"] = current + 1
+                df.at[idx, "current"] = current + 1
                 conn.update(data=df)
                 st.rerun()
 
@@ -51,15 +58,23 @@ with tab1:
 with tab2:
     st.subheader("新しい科目を追加")
     with st.form("add_dept_form", clear_on_submit=True):
-        new_dept = st.text_input("科名（例: 矯正科、小児歯科など）")
+        new_name = st.text_input("科名（例: 矯正科、小児歯科など）")
         new_target = st.number_input("目標ケース数", min_value=1, value=5, step=1)
+        new_deadline = st.text_input("締切（任意 例: 10/31）")
         submitted = st.form_submit_button("科目を追加する")
         
-        if submitted and new_dept:
-            new_row = {"科名": new_dept, "目標ケース": new_target, "現在ケース": 0}
-            df = df._append(new_row, ignore_index=True)
+        if submitted and new_name:
+            next_id = int(df["id"].max() + 1) if not df.empty and "id" in df.columns and pd.notna(df["id"].max()) else 1
+            new_row = {
+                "id": next_id,
+                "name": new_name,
+                "target": new_target,
+                "current": 0,
+                "deadline": new_deadline
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             conn.update(data=df)
-            st.success(f"「{new_dept}」を追加しました！")
+            st.success(f"「{new_name}」を追加しました！")
             st.rerun()
 
     st.divider()
@@ -68,11 +83,11 @@ with tab2:
     for idx, row in df.iterrows():
         col_a, col_b, col_c = st.columns([2, 2, 1])
         with col_a:
-            st.write(f"**{row['科名']}**")
+            st.write(f"**{row.get('name', '')}**")
         with col_b:
-            new_val = st.number_input(f"目標数", min_value=0, value=int(row["目標ケース"]), key=f"target_{idx}")
-            if new_val != row["目標ケース"]:
-                df.at[idx, "目標ケース"] = new_val
+            new_val = st.number_input(f"目標数", min_value=0, value=int(row["target"]), key=f"target_{idx}")
+            if new_val != row["target"]:
+                df.at[idx, "target"] = new_val
                 conn.update(data=df)
                 st.rerun()
         with col_c:
