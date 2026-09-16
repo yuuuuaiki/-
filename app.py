@@ -13,12 +13,36 @@ def load_data():
 
 try:
     df = load_data()
-    # 必要な列が存在するかチェック＆数値型に変換
+    
+    # 列名の空白除去＆小文字化マップを作成
+    col_map = {str(c).strip().lower(): c for c in df.columns}
+    
+    # 柔軟な列名マッピング
+    name_col = col_map.get("name") or col_map.get("科名") or col_map.get("科") or df.columns[1] if len(df.columns) > 1 else df.columns[0]
+    target_col = col_map.get("target") or col_map.get("目標ケース") or col_map.get("目標") or df.columns[2] if len(df.columns) > 2 else df.columns[0]
+    current_col = col_map.get("current") or col_map.get("現在ケース") or col_map.get("現在") or df.columns[3] if len(df.columns) > 3 else df.columns[0]
+    deadline_col = col_map.get("deadline") or col_map.get("締切")
+
+    # 標準の列名に統一
+    df = df.rename(columns={
+        name_col: "name",
+        target_col: "target",
+        current_col: "current"
+    })
+    if deadline_col:
+        df = df.rename(columns={deadline_col: "deadline"})
+    else:
+        df["deadline"] = ""
+
+    # 数値型に変換
     df["target"] = pd.to_numeric(df["target"], errors="coerce").fillna(0).astype(int)
     df["current"] = pd.to_numeric(df["current"], errors="coerce").fillna(0).astype(int)
+
 except Exception as e:
-    st.error("データの読み込みに失敗しました。Secretsの設定やスプレッドシートの共有設定を確認してください。")
-    st.write(e)
+    st.error("データの読み込み・変換に失敗しました。")
+    st.write("エラー詳細:", e)
+    if 'df' in locals():
+        st.write("読み込まれた列名一覧:", list(df.columns))
     st.stop()
 
 # タブの作成（進捗確認 と 設定・編集）
@@ -64,14 +88,16 @@ with tab2:
         submitted = st.form_submit_button("科目を追加する")
         
         if submitted and new_name:
-            next_id = int(df["id"].max() + 1) if not df.empty and "id" in df.columns and pd.notna(df["id"].max()) else 1
+            next_id = int(df["id"].max() + 1) if "id" in df.columns and pd.notna(df["id"].max()) else len(df) + 1
             new_row = {
-                "id": next_id,
                 "name": new_name,
                 "target": new_target,
                 "current": 0,
                 "deadline": new_deadline
             }
+            if "id" in df.columns:
+                new_row["id"] = next_id
+                
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             conn.update(data=df)
             st.success(f"「{new_name}」を追加しました！")
