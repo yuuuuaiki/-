@@ -11,14 +11,16 @@ if not API_URL:
     st.error("Secretsに api_url が設定されていません。")
     st.stop()
 
+# データを読み込む関数（リダイレクトを許可）
 def load_data():
-    res = requests.get(API_URL)
+    res = requests.get(API_URL, allow_redirects=True)
     data = res.json()
     return pd.DataFrame(data)
 
+# データを保存する関数（リダイレクトを許可）
 def save_data(df):
     records = df.to_dict(orient="records")
-    requests.post(API_URL, json=records)
+    requests.post(API_URL, json=records, allow_redirects=True)
 
 # 日付表示の整形関数
 def format_deadline(val):
@@ -35,7 +37,7 @@ try:
     df["current"] = pd.to_numeric(df["current"], errors="coerce").fillna(0).astype(int)
 except Exception as e:
     st.error("データの読み込みに失敗しました。")
-    st.write(e)
+    st.write("エラー詳細:", e)
     st.stop()
 
 tab1, tab2 = st.tabs(["📊 進捗確認", "⚙️ 科目の追加・編集"])
