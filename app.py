@@ -29,6 +29,8 @@ try:
     df = load_data()
     if df.empty:
         df = pd.DataFrame(columns=["id", "name", "target", "current", "deadline"])
+    if "deadline" not in df.columns:
+        df["deadline"] = ""
     df["target"] = pd.to_numeric(df["target"], errors="coerce").fillna(0).astype(int)
     df["current"] = pd.to_numeric(df["current"], errors="coerce").fillna(0).astype(int)
 except Exception as e:
@@ -69,32 +71,32 @@ with tab1:
                 deadline = format_deadline(raw_deadline)
                 progress = (current / target) if target > 0 else 0.0
 
-                st.write(f"**{dept}**" + (f" (締切: {deadline})" if deadline else "") + f" ({current} / {target})")
+                st.write(f"**{dept}**" + (f" 🕒 締切: {deadline}" if deadline else "") + f" ({current} / {target})")
                 st.progress(min(progress, 1.0))
 
                 col_plus, col_minus, _ = st.columns([1, 1, 2])
                 with col_plus:
                     if st.button("＋1", key=f"btn_plus_{idx}"):
                         df.at[idx, "current"] = current + 1
-                        save_data(df.drop(columns=["category", "sub_name"]))
+                        save_data(df.drop(columns=["category", "sub_name"], errors="ignore"))
                         st.rerun()
                 with col_minus:
                     if st.button("ー1", key=f"btn_minus_{idx}"):
                         if current > 0:
                             df.at[idx, "current"] = current - 1
-                            save_data(df.drop(columns=["category", "sub_name"]))
+                            save_data(df.drop(columns=["category", "sub_name"], errors="ignore"))
                             st.rerun()
                 st.divider()
 
 # --- タブ2: 科目の追加・編集 ---
 with tab2:
     st.subheader("新しい科目を追加")
-    st.caption("※「小児歯科：CR修復（3月まで）」のように『科名：処置名』で入力するとグループ分けされます！")
+    st.caption("※「小児歯科：CR修復」のように『科名：処置名』で入力するとグループ分けされます！")
     
     with st.form("add_dept_form", clear_on_submit=True):
-        new_name = st.text_input("科名・処置名（例: 小児歯科：CR修復（3月まで））")
+        new_name = st.text_input("科名・処置名（例: 小児歯科：CR修復）")
         new_target = st.number_input("目標ケース数", min_value=1, value=2, step=1)
-        new_deadline = st.text_input("時期・締切（例: 3月まで / 2027-10-18）")
+        new_deadline = st.text_input("時期・締切（例: 12月まで / 2026-12-31）")
         submitted = st.form_submit_button("科目を追加する")
         
         if submitted and new_name:
@@ -117,17 +119,29 @@ with tab2:
     
     clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
     for idx, row in clean_df.iterrows():
-        col_a, col_b, col_c = st.columns([2, 2, 1])
-        with col_a:
-            st.write(f"**{row.get('name', '')}**")
-        with col_b:
-            new_val = st.number_input(f"目標数", min_value=0, value=int(row["target"]), key=f"target_{idx}")
-            if new_val != row["target"]:
-                clean_df.at[idx, "target"] = new_val
-                save_data(clean_df)
-                st.rerun()
-        with col_c:
+        st.write(f"**{row.get('name', '')}**")
+        col_target, col_dead, col_del = st.columns([2, 3, 1])
+        
+        with col_target:
+            new_target_val = st.number_input("目標数", min_value=0, value=int(row["target"]), key=f"target_{idx}")
+        
+        with col_dead:
+            current_dead = format_deadline(row.get("deadline", ""))
+            new_dead_val = st.text_input("締切・時期", value=str(current_dead), key=f"dead_{idx}")
+            
+        with col_del:
+            st.write("") # スペース調整
+            st.write("")
             if st.button("削除", key=f"del_{idx}"):
                 clean_df = clean_df.drop(idx)
                 save_data(clean_df)
                 st.rerun()
+
+        # 目標数か締切が変更されたら保存
+        if new_target_val != row["target"] or new_dead_val != current_dead:
+            clean_df.at[idx, "target"] = new_target_val
+            clean_df.at[idx, "deadline"] = new_dead_val
+            save_data(clean_df)
+            st.rerun()
+
+        st.divider()
