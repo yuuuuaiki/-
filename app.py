@@ -20,6 +20,13 @@ def save_data(df):
     records = df.to_dict(orient="records")
     requests.post(API_URL, json=records)
 
+# 日付表示の整形関数
+def format_deadline(val):
+    if pd.isna(val) or str(val).strip() == "":
+        return ""
+    val_str = str(val).split("T")[0] # ISO形式のT以降をカット
+    return val_str
+
 try:
     df = load_data()
     if df.empty:
@@ -49,19 +56,27 @@ with tab1:
         dept = row.get("name", f"科目{idx}")
         target = int(row["target"])
         current = int(row["current"])
-        deadline = row.get("deadline", "")
+        raw_deadline = row.get("deadline", "")
+        deadline = format_deadline(raw_deadline)
         progress = (current / target) if target > 0 else 0.0
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            deadline_str = f" (締切: {deadline})" if pd.notna(deadline) and str(deadline).strip() != "" else ""
-            st.write(f"**{dept}**{deadline_str} ({current} / {target})")
-            st.progress(min(progress, 1.0))
-        with col2:
-            if st.button("＋1", key=f"btn_{idx}"):
+        st.write(f"**{dept}**" + (f" (締切: {deadline})" if deadline else "") + f" ({current} / {target})")
+        st.progress(min(progress, 1.0))
+
+        # ＋1 ボタンと ー1 ボタンを横並びに配置
+        col_plus, col_minus, col_empty = st.columns([1, 1, 2])
+        with col_plus:
+            if st.button("＋1", key=f"btn_plus_{idx}"):
                 df.at[idx, "current"] = current + 1
                 save_data(df)
                 st.rerun()
+        with col_minus:
+            if st.button("ー1", key=f"btn_minus_{idx}"):
+                if current > 0:
+                    df.at[idx, "current"] = current - 1
+                    save_data(df)
+                    st.rerun()
+        st.divider()
 
 # --- タブ2: 科目の追加・編集 ---
 with tab2:
@@ -69,7 +84,7 @@ with tab2:
     with st.form("add_dept_form", clear_on_submit=True):
         new_name = st.text_input("科名（例: 矯正科、小児歯科など）")
         new_target = st.number_input("目標ケース数", min_value=1, value=5, step=1)
-        new_deadline = st.text_input("締切（任意 例: 10/31）")
+        new_deadline = st.text_input("締切（任意 例: 2027-10-18）")
         submitted = st.form_submit_button("科目を追加する")
         
         if submitted and new_name:
