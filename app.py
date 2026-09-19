@@ -17,7 +17,6 @@ def load_data():
     return pd.DataFrame(data)
 
 def save_data(df):
-    # 余分な列を削除して保存
     clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
     records = clean_df.to_dict(orient="records")
     requests.post(API_URL, json=records, allow_redirects=True)
@@ -64,7 +63,6 @@ with tab1:
         for cat in categories:
             cat_df = df[df["category"] == cat]
             
-            # グループごとのアコーディオン表示
             with st.expander(f"📌 {cat}（{cat_df['current'].sum()} / {cat_df['target'].sum()}）", expanded=True):
                 for idx, row in cat_df.iterrows():
                     dept = row["sub_name"]
@@ -97,14 +95,13 @@ with tab2:
     st.caption("※「小児歯科：CR修復」のように『科名：処置名』で入力するとグループ分けされます！")
     
     with st.form("add_dept_form", clear_on_submit=True):
-        new_name = st.text_input("科名・処置名（例: 小児歯科：CR修復（12月まで））")
+        new_name = st.text_input("科名・処置名（例: 小児歯科：CR修復）")
         new_target = st.number_input("目標ケース数", min_value=1, value=2, step=1)
         new_deadline = st.text_input("時期・締切（例: 12月まで / 2026-12-31）")
         submitted = st.form_submit_button("科目を追加する")
         
         if submitted and new_name:
             clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
-            # 重複しない新しいIDを生成
             max_id = pd.to_numeric(clean_df["id"], errors="coerce").max()
             next_id = int(max_id + 1) if pd.notna(max_id) else 1
             
@@ -125,7 +122,9 @@ with tab2:
     
     clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
     for idx, row in clean_df.iterrows():
-        st.write(f"**{row.get('name', '')}**")
+        # 科目名・目標数・締切を並べて編集できるように修正
+        new_name_val = st.text_input("科名・処置名", value=str(row.get("name", "")), key=f"name_edit_{row['id']}")
+        
         col_target, col_dead, col_del = st.columns([2, 3, 1])
         
         with col_target:
@@ -143,8 +142,12 @@ with tab2:
                 save_data(clean_df)
                 st.rerun()
 
-        # 変更の検知と保存
-        if new_target_val != row["target"] or new_dead_val != current_dead:
+        # 科名・目標数・締切のどれかが変更されたら自動保存
+        if (new_name_val != row["name"] or 
+            new_target_val != row["target"] or 
+            new_dead_val != current_dead):
+            
+            clean_df.loc[clean_df["id"] == row["id"], "name"] = new_name_val
             clean_df.loc[clean_df["id"] == row["id"], "target"] = new_target_val
             clean_df.loc[clean_df["id"] == row["id"], "deadline"] = new_dead_val
             save_data(clean_df)
