@@ -1,6 +1,4 @@
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
@@ -61,98 +59,37 @@ st.markdown("""
         text-align: left !important;
         padding-left: 8px !important;
     }
-    .save-bar {
-        position: sticky;
-        top: 0;
-        z-index: 999;
-        background-color: white;
-        padding: 8px 0;
-        border-bottom: 2px solid #ddd;
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .save-btn {
-        background-color: #2e7d32;
-        color: white;
-        border: none;
-        padding: 8px 20px;
-        font-size: 0.95rem;
-        font-weight: bold;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-    .save-btn:hover {
-        background-color: #1b5e20;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Google スプレッドシート連携処理 ---
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-TARGET_SHEET_NAME = "症例管理データ"
+st.title("📋 見学ケース必要項目数早見表")
 
-@st.cache_resource
-def get_gspread_client():
-    try:
-        credentials = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
-            scopes=SCOPES
-        )
-        return gspread.authorize(credentials)
-    except Exception:
-        return None
+# ブラウザのLocalStorageを使って自動で読み込み・保存を行うJavaScript
+st.markdown("""
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 保存されているチェック状態を復元
+    const savedData = JSON.parse(localStorage.getItem('kengaku_case_checks') || '{}');
+    document.querySelectorAll('.case-checkbox').forEach(function(cb) {
+        const key = cb.getAttribute('data-key');
+        if (savedData[key]) {
+            cb.checked = true;
+        }
+        // チェック切り替え時に即時保存
+        cb.addEventListener('change', function() {
+            const currentData = JSON.parse(localStorage.getItem('kengaku_case_checks') || '{}');
+            if (this.checked) {
+                currentData[key] = true;
+            } else {
+                delete currentData[key];
+            }
+            localStorage.setItem('kengaku_case_checks', JSON.stringify(currentData));
+        });
+    });
+});
+</script>
+""", unsafe_allow_html=True)
 
-def load_data_from_sheet(sheet_name=TARGET_SHEET_NAME):
-    data = {}
-    client = get_gspread_client()
-    if not client:
-        return data
-    try:
-        sh = client.open(sheet_name).sheet1
-        records = sh.get_all_records()
-        for row in records:
-            k = row.get("key")
-            v = row.get("val")
-            if k:
-                data[str(k)] = (v == 1 or v == "1" or v is True)
-    except Exception:
-        pass
-    return data
-
-def save_all_to_sheet(checks_dict, sheet_name=TARGET_SHEET_NAME):
-    client = get_gspread_client()
-    if not client:
-        return False
-    try:
-        sh = client.open(sheet_name).sheet1
-        for k, v in checks_dict.items():
-            val_str = "1" if v else "0"
-            cell = None
-            try:
-                cell = sh.find(str(k))
-            except Exception:
-                pass
-            
-            if cell:
-                sh.update_cell(cell.row, 2, val_str)
-            else:
-                try:
-                    if not sh.row_values(1):
-                        sh.append_row(["key", "val"])
-                except Exception:
-                    pass
-                sh.append_row([str(k), val_str])
-        return True
-    except Exception:
-        return False
-
-# 初回起動時にスプレッドシートから読み込み
-if "checks" not in st.session_state:
-    st.session_state.checks = load_data_from_sheet()
-
-# 項目定義の全リスト
 SECTIONS = {
     "保存・治療科": [
         ("覆髄法", 2), ("抜髄法", 2), ("感染根管治療", 5), 
@@ -201,32 +138,7 @@ SECTIONS = {
     "当番・研修関連": [("検査部", 1), ("口腔総合診療部", 7), ("医学部病院", 2)]
 }
 
-# フォーム送信時の処理（チェックボックスデータを集計してスプレッドシート保存）
-if "form_submitted" in st.query_params:
-    new_checks = {}
-    for title, items in SECTIONS.items():
-        for row in items:
-            item_name = row[0]
-            need_count = row[1]
-            is_header = row[2] if len(row) > 2 else False
-            if not is_header:
-                for i in range(need_count):
-                    key = f"{title}_{item_name}_{i}".replace(" ", "_").replace("'", "").replace('"', '')
-                    new_checks[key] = key in st.query_params
-
-    st.session_state.checks = new_checks
-    if save_all_to_sheet(new_checks):
-        st.success("✨ 「症例管理データ」に正常に保存されました！")
-    else:
-        st.error("⚠️ 保存に失敗しました。接続を確認してください。")
-    st.query_params.clear()
-
-# HTMLフォーム開始（表とボタンのみを綺麗に配置）
-html_content = '<form method="get">'
-html_content += '<input type="hidden" name="form_submitted" value="1">'
-html_content += '<div class="save-bar"><span>📋 見学ケース必要項目数早見表</span><input type="submit" class="save-btn" value="💾 変更を保存する"></div>'
-
-def get_table_html(title, items, max_cols=15):
+def render_table_html(title, items, max_cols=15):
     h = f'<h3>★ {title}</h3>'
     h += '<div class="table-scroll"><table class="custom-table">'
     h += '<tr><th>項目</th><th>必要</th>'
@@ -246,32 +158,28 @@ def get_table_html(title, items, max_cols=15):
             for i in range(max_cols):
                 if i < need_count:
                     key = f"{title}_{item_name}_{i}".replace(" ", "_").replace("'", "").replace('"', '')
-                    is_checked = st.session_state.checks.get(key, False)
-                    checked_attr = "checked" if is_checked else ""
-                    h += f'<td><input type="checkbox" name="{key}" value="1" {checked_attr}></td>'
+                    h += f'<td><input type="checkbox" class="case-checkbox" data-key="{key}"></td>'
                 else:
                     h += '<td class="empty-cell"></td>'
-            h += '</tr>'
+            html_end = '</tr>'
+            h += html_end
     h += '</table></div>'
     return h
 
-# 全セクションをHTML表として出力
-html_content += get_table_html("保存・治療科", SECTIONS["保存・治療科"], max_cols=15)
-html_content += get_table_html("第一口腔外科", SECTIONS["第一口腔外科"], max_cols=5)
-html_content += get_table_html("第二口腔外科", SECTIONS["第二口腔外科"], max_cols=5)
-html_content += get_table_html("口腔補綴科", SECTIONS["口腔補綴科"], max_cols=11)
-html_content += get_table_html("咀嚼補綴科", SECTIONS["咀嚼補綴科"], max_cols=3)
-html_content += get_table_html("予防歯科", SECTIONS["予防歯科"], max_cols=5)
-html_content += get_table_html("小児歯科", SECTIONS["小児歯科"], max_cols=5)
-html_content += get_table_html("放射線科", SECTIONS["放射線科"], max_cols=10)
-html_content += get_table_html("放射線科：撮影見学", SECTIONS["放射線科：撮影見学"], max_cols=1)
-html_content += get_table_html("歯科麻酔科", SECTIONS["歯科麻酔科"], max_cols=3)
-html_content += get_table_html("顎口腔機能治療部", SECTIONS["顎口腔機能治療部"], max_cols=10)
-html_content += get_table_html("障害者歯科", SECTIONS["障害者歯科"], max_cols=5)
-html_content += get_table_html("矯正科", SECTIONS["矯正科"], max_cols=3)
-html_content += get_table_html("当番・研修関連", SECTIONS["当番・研修関連"], max_cols=7)
+html_all = ""
+html_all += render_table_html("保存・治療科", SECTIONS["保存・治療科"], max_cols=15)
+html_all += render_table_html("第一口腔外科", SECTIONS["第一口腔外科"], max_cols=5)
+html_all += render_table_html("第二口腔外科", SECTIONS["第二口腔外科"], max_cols=5)
+html_all += render_table_html("口腔補綴科", SECTIONS["口腔補綴科"], max_cols=11)
+html_all += render_table_html("咀嚼補綴科", SECTIONS["咀嚼補綴科"], max_cols=3)
+html_all += render_table_html("予防歯科", SECTIONS["予防歯科"], max_cols=5)
+html_all += render_table_html("小児歯科", SECTIONS["小児歯科"], max_cols=5)
+html_all += render_table_html("放射線科", SECTIONS["放射線科"], max_cols=10)
+html_all += render_table_html("放射線科：撮影見学", SECTIONS["放射線科：撮影見学"], max_cols=1)
+html_all += render_table_html("歯科麻酔科", SECTIONS["歯科麻酔科"], max_cols=3)
+html_all += render_table_html("顎口腔機能治療部", SECTIONS["顎口腔機能治療部"], max_cols=10)
+html_all += render_table_html("障害者歯科", SECTIONS["障害者歯科"], max_cols=5)
+html_all += render_table_html("矯正科", SECTIONS["矯正科"], max_cols=3)
+html_all += render_table_html("当番・研修関連", SECTIONS["当番・研修関連"], max_cols=7)
 
-html_content += '<div style="text-align: center; margin: 20px 0;"><input type="submit" class="save-btn" value="💾 変更を保存する" style="font-size: 1.1rem; padding: 10px 30px;"></div>'
-html_content += '</form>'
-
-st.markdown(html_content, unsafe_allow_html=True)
+st.markdown(html_all, unsafe_allow_html=True)
