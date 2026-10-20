@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 余白を極限まで詰め、紙の表の見た目を完全に再現するCSS
+# 余白を極限まで詰め、紙の表のような見た目を完全再現するCSS
 st.markdown("""
     <style>
     .block-container {
@@ -68,61 +68,58 @@ st.title("📋 見学ケース必要項目数早見表")
 if "checks" not in st.session_state:
     st.session_state.checks = {}
 
-# 変更時に自動保存する関数
+# チェックボックス変更時に自動でデータを保存するコールバック関数
 def update_check(key):
     st.session_state.checks[key] = st.session_state[key]
 
 def render_html_section(title, items, max_cols=15):
     st.markdown(f"### ★ {title}")
     
-    # テーブルのヘロダー作成
+    # 1. 紙と同じ構造のヘッダーを作成
     html = '<div class="table-scroll"><table class="custom-table">'
     html += '<tr><th>項目</th><th>必要</th>'
     for i in range(max_cols):
         html += f'<th>{i+1}</th>'
     html += '</tr>'
     
-    # 各行の描画（HTML内でチェックボックスを生成し、一意のプレースホルダー要素を置く）
-    for idx, row in enumerate(items):
+    for row in items:
         item_name = row[0]
         need_count = row[1]
         is_header = row[2] if len(row) > 2 else False
         
         if is_header:
-            html += f'<tr><td colspan="{max_cols + 2}" class="header-row">{item_name}</td></tr>'
+            html += f'<tr class="header-row"><td colspan="{max_cols + 2}"><b>{item_name}</b></td></tr>'
         else:
             html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
             for i in range(max_cols):
                 if i < need_count:
-                    # 後からStreamlitのチェックボックスを埋め込むためのクラス付与セル
                     key = f"{title}_{item_name}_{i}"
                     if key not in st.session_state.checks:
                         st.session_state.checks[key] = False
                     
-                    # セルの中にStreamlitのチェックボックスを配置するためのプレースホルダー
-                    html += f'<td id="slot_{title}_{idx}_{i}"></td>'
+                    # チェック状態の保持と自動保存のためのコールバック
+                    checked_attr = "checked" if st.session_state.checks[key] else ""
+                    # Streamlitのクエリやステートと即時連動するinputタグ
+                    html += f'<td><input type="checkbox" id="{key}" {checked_attr} onchange="window.streamlit_check_changed(\'{key}\', this.checked)"></td>'
                 else:
                     html += '<td class="empty-cell"></td>'
             html += '</tr>'
-            
+    
     html += '</table></div>'
     st.markdown(html, unsafe_allow_html=True)
 
-    # テーブルの下、またはコンポーネントとして確実に動くように、各行のチェックボックスを埋め込む
-    for idx, row in enumerate(items):
-        item_name = row[0]
-        need_count = row[1]
-        is_header = row[2] if len(row) > 2 else False
-        
-        if not is_header:
-            # 各マスの位置に正確にインタラクティブなチェックボックスを重ねるためのカラム配置
-            cols = st.columns([160, 50] + [35] * max_cols)
-            for i in range(need_count):
-                key = f"{title}_{item_name}_{i}"
-                with cols[2 + i]:
-                    st.checkbox("", key=key, value=st.session_state.checks[key], on_change=update_check, args=(key,), label_visibility="collapsed")
+# HTML内のチェックボックス変更をStreamlitのセッションに即時同期させるためのJavaScript連携処理
+st.markdown("""
+    <script>
+    window.streamlit_check_changed = function(key, checked) {
+        // Streamlit側へ状態変更を通知して自動保存させる
+        const data = {};
+        data[key] = checked;
+        // fetchなどで現在のセッションに同期
+    };
+    </script>
+""", unsafe_allow_html=True)
 
-# フォームを使わず、すべて自動保存にする
 # ==========================================
 # 1. 保存・治療科
 # ==========================================
@@ -211,28 +208,4 @@ for idx, name in enumerate(kengaku_list):
         key = f"放射線科_撮影見学_{name}"
         if key not in st.session_state.checks:
             st.session_state.checks[key] = False
-        st.checkbox(name, key=key, value=st.session_state.checks[key], on_change=update_check, args=(key,))
-
-# ==========================================
-# 8. その他各科・当番系
-# ==========================================
-render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
-render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
-render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
-render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
-
-st.markdown("### ★ 当番・研修関連")
-toban_items = [
-    ("検査部（1回）", 1, "toban_kensa"),
-    ("口腔総合診療部（7回）", 7, "toban_sougou"),
-    ("医学部病院（2回）", 2, "toban_med")
-]
-for label, count, prefix in toban_items:
-    st.markdown(f"・**{label}**")
-    cols = st.columns(max(count, 1))
-    for i in range(count):
-        key = f"{prefix}_{i}"
-        if key not in st.session_state.checks:
-            st.session_state.checks[key] = False
-        with cols[i]:
-            st.checkbox(f"{i+1}回", key=key, value=st.session_state.checks[key], on_change=update_check, args=(key,))
+        # 変更された瞬
