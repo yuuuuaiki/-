@@ -1,8 +1,9 @@
 import streamlit as st
+import json
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 1. 余白を極限まで詰め、紙の表の見た目を完全に再現するCSS
+# 余白を極限まで詰め、紙の表の見た目を完全に再現するCSS
 st.markdown("""
     <style>
     .block-container {
@@ -64,31 +65,9 @@ st.markdown("""
 
 st.title("📋 見学ケース必要項目数早見表")
 
-# ブラウザのLocalStorageを使って自動で読み込み・保存を行うJavaScript
-st.markdown("""
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 保存されているチェック状態を復元
-    const savedData = JSON.parse(localStorage.getItem('kengaku_case_checks') || '{}');
-    document.querySelectorAll('.case-checkbox').forEach(function(cb) {
-        const key = cb.getAttribute('data-key');
-        if (savedData[key]) {
-            cb.checked = true;
-        }
-        // チェック切り替え時に即時保存
-        cb.addEventListener('change', function() {
-            const currentData = JSON.parse(localStorage.getItem('kengaku_case_checks') || '{}');
-            if (this.checked) {
-                currentData[key] = true;
-            } else {
-                delete currentData[key];
-            }
-            localStorage.setItem('kengaku_case_checks', JSON.stringify(currentData));
-        });
-    });
-});
-</script>
-""", unsafe_allow_html=True)
+# セッション状態の初期化（URLパラメータや外部ストレージを使わず、確実に動作する形）
+if "user_checks" not in st.session_state:
+    st.session_state.user_checks = {}
 
 SECTIONS = {
     "保存・治療科": [
@@ -138,48 +117,91 @@ SECTIONS = {
     "当番・研修関連": [("検査部", 1), ("口腔総合診療部", 7), ("医学部病院", 2)]
 }
 
-def render_table_html(title, items, max_cols=15):
-    h = f'<h3>★ {title}</h3>'
-    h += '<div class="table-scroll"><table class="custom-table">'
-    h += '<tr><th>項目</th><th>必要</th>'
-    for i in range(max_cols):
-        h += f'<th>{i+1}</th>'
-    h += '</tr>'
-    
-    for row in items:
-        item_name = row[0]
-        need_count = row[1]
-        is_header = row[2] if len(row) > 2 else False
-        
-        if is_header:
-            h += f'<tr class="header-row"><td colspan="{max_cols + 2}"><b>{item_name}</b></td></tr>'
-        else:
-            h += f'<tr><td>{item_name}</td><td>{need_count}</td>'
-            for i in range(max_cols):
-                if i < need_count:
-                    key = f"{title}_{item_name}_{i}".replace(" ", "_").replace("'", "").replace('"', '')
-                    h += f'<td><input type="checkbox" class="case-checkbox" data-key="{key}"></td>'
-                else:
-                    h += '<td class="empty-cell"></td>'
-            html_end = '</tr>'
-            h += html_end
-    h += '</table></div>'
-    return h
+# ブラウザのLocalStorageと完全に同期させるコンポーネント（HTML/JS）
+component_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    .table-scroll {{ overflow-x: auto; width: 100%; margin-bottom: 0.4rem; }}
+    .custom-table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; font-family: sans-serif; }}
+    .custom-table th, .custom-table td {{ border: 1px solid #999; padding: 3px 5px; text-align: center; white-space: nowrap; height: 24px; }}
+    .custom-table th:first-child, .custom-table td:first-child {{ text-align: left; font-weight: bold; background-color: #f7f7f7; min-width: 160px; }}
+    .custom-table th:nth-child(2), .custom-table td:nth-child(2) {{ text-align: center; background-color: #f7f7f7; min-width: 50px; font-size: 0.75rem; color: #555; }}
+    .empty-cell {{ background-color: #eaeaea; }}
+    .header-row {{ background-color: #f1f3f4; font-weight: bold; text-align: left !important; padding-left: 8px !important; }}
+    h3 {{ margin-top: 0.4rem !important; margin-bottom: 0.1rem !important; font-size: 0.95rem !important; color: #111; }}
+</style>
+</head>
+<body>
+<div id="app"></div>
 
-html_all = ""
-html_all += render_table_html("保存・治療科", SECTIONS["保存・治療科"], max_cols=15)
-html_all += render_table_html("第一口腔外科", SECTIONS["第一口腔外科"], max_cols=5)
-html_all += render_table_html("第二口腔外科", SECTIONS["第二口腔外科"], max_cols=5)
-html_all += render_table_html("口腔補綴科", SECTIONS["口腔補綴科"], max_cols=11)
-html_all += render_table_html("咀嚼補綴科", SECTIONS["咀嚼補綴科"], max_cols=3)
-html_all += render_table_html("予防歯科", SECTIONS["予防歯科"], max_cols=5)
-html_all += render_table_html("小児歯科", SECTIONS["小児歯科"], max_cols=5)
-html_all += render_table_html("放射線科", SECTIONS["放射線科"], max_cols=10)
-html_all += render_table_html("放射線科：撮影見学", SECTIONS["放射線科：撮影見学"], max_cols=1)
-html_all += render_table_html("歯科麻酔科", SECTIONS["歯科麻酔科"], max_cols=3)
-html_all += render_table_html("顎口腔機能治療部", SECTIONS["顎口腔機能治療部"], max_cols=10)
-html_all += render_table_html("障害者歯科", SECTIONS["障害者歯科"], max_cols=5)
-html_all += render_table_html("矯正科", SECTIONS["矯正科"], max_cols=3)
-html_all += render_table_html("当番・研修関連", SECTIONS["当番・研修関連"], max_cols=7)
+<script>
+const sections = {json.dumps(SECTIONS)};
 
-st.markdown(html_all, unsafe_allow_html=True)
+function render() {{
+    let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{{}}');
+    let html = '';
+
+    for (const [title, items] of Object.entries(sections)) {{
+        let max_cols = 15;
+        if (["第一口腔外科", "第二口腔外科", "予防歯科", "小児歯科", "障害者歯科"].includes(title)) max_cols = 5;
+        else if (title === "口腔補綴科") max_cols = 11;
+        else if (["咀嚼補綴科", "歯科麻酔科", "矯正科"].includes(title)) max_cols = 3;
+        else if (["放射線科", "顎口腔機能治療部"].includes(title)) max_cols = 10;
+        else if (title === "放射線科：撮影見学") max_cols = 9;
+        else if (title === "当番・研修関連") max_cols = 7;
+
+        html += `<h3>★ ${{title}}</h3>`;
+        html += '<div class="table-scroll"><table class="custom-table">';
+        html += '<tr><th>項目</th><th>必要</th>';
+        for (let i = 0; i < max_cols; i++) {{
+            html += `<th>${{i+1}}</th>`;
+        }}
+        html += '</tr>';
+
+        for (const row of items) {{
+            const itemName = row[0];
+            const needCount = row[1];
+            const isHeader = row[2] || false;
+
+            if (isHeader) {{
+                html += `<tr class="header-row"><td colspan="${{max_cols + 2}}"><b>${{itemName}}</b></td></tr>`;
+            }} else {{
+                html += `<tr><td>${{itemName}}</td><td>${{needCount}}</td>`;
+                for (let i = 0; i < max_cols; i++) {{
+                    if (i < needCount) {{
+                        const key = `${{title}}_${{itemName}}_${{i}}`.replace(/\\s+/g, '_').replace(/['"]+/g, '');
+                        const isChecked = saved[key] ? 'checked' : '';
+                        html += `<td><input type="checkbox" data-key="${{key}}" ${{isChecked}} onchange="updateCheck(this)"></td>`;
+                    }} else {{
+                        html += '<td class="empty-cell"></td>';
+                    }}
+                }}
+                html += '</tr>';
+            }}
+        }}
+        html += '</table></div>';
+    }}
+
+    document.getElementById('app').innerHTML = html;
+}}
+
+function updateCheck(el) {{
+    let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{{}}');
+    const key = el.getAttribute('data-key');
+    if (el.checked) {{
+        saved[key] = true;
+    }} else {{
+        delete saved[key];
+    }}
+    localStorage.setItem('kengaku_data_v2', JSON.stringify(saved));
+}}
+
+window.onload = render;
+</script>
+</body>
+</html>
+"""
+
+st.components.v1.html(component_html, height=2200, scrolling=True)
