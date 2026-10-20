@@ -4,7 +4,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 1. 余白を極限まで詰め、紙の表の見た目を完全に再現するCSS
+# 余白を極限まで詰め、紙の表の見た目を完全に再現するCSS
 st.markdown("""
     <style>
     .block-container {
@@ -92,7 +92,7 @@ def load_data_from_sheet(sheet_name="見学ケースデータ"):
             k = row.get("key")
             v = row.get("val")
             if k:
-                data[k] = (v == 1 or v == "1" or v is True)
+                data[str(k)] = (v == 1 or v == "1" or v is True)
     except Exception:
         pass
     return data
@@ -106,7 +106,7 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
         val_str = "1" if value else "0"
         cell = None
         try:
-            cell = sh.find(key)
+            cell = sh.find(str(key))
         except Exception:
             pass
             
@@ -118,7 +118,7 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
                     sh.append_row(["key", "val"])
             except Exception:
                 pass
-            sh.append_row([key, val_str])
+            sh.append_row([str(key), val_str])
     except Exception:
         pass
 
@@ -134,7 +134,7 @@ if "save_key" in st.query_params:
     save_key_to_sheet(key_to_save, val_to_save)
     st.query_params.clear()
 
-# チェックボックス変更時にバックグラウンド通信で保存するJavaScript関数
+# バックグラウンド自動保存スクリプト
 st.markdown("""
 <script>
 function toggleCheck(key, checkbox) {
@@ -167,7 +167,7 @@ def render_html_section(title, items, max_cols=15):
             html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
             for i in range(max_cols):
                 if i < need_count:
-                    key = f"{title}_{item_name}_{i}"
+                    key = f"{title}_{item_name}_{i}".replace(" ", "_").replace("'", "").replace('"', '')
                     is_checked = st.session_state.checks.get(key, False)
                     checked_attr = "checked" if is_checked else ""
                     html += f'<td><input type="checkbox" {checked_attr} onchange="toggleCheck(\'{key}\', this)"></td>'
@@ -250,4 +250,29 @@ shoni_items = [
 ]
 render_html_section("小児歯科", shoni_items, max_cols=5)
 
-# =================================
+# ==========================================
+# 7. 放射線科
+# ==========================================
+render_html_section("放射線科", [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)], max_cols=10)
+
+kengaku_items = [
+    ("パノラマXp", 1), ("セファロ撮影", 1), ("顎関節撮影", 1),
+    ("頭頸部撮影", 1), ("MBCT", 1), ("CBCT", 1),
+    ("MRI 顎関節", 1), ("MRI 頭頸部", 1), ("放射線治療", 1)
+]
+render_html_section("放射線科：撮影見学", kengaku_items, max_cols=1)
+
+# ==========================================
+# 8. その他各科・当番系
+# ==========================================
+render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
+render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
+render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
+render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
+
+toban_items = [
+    ("検査部", 1),
+    ("口腔総合診療部", 7),
+    ("医学部病院", 2)
+]
+render_html_section("当番・研修関連", toban_items, max_cols=7)
