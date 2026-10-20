@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 余白を極限まで詰め、紙の表のような見た目にするCSS
+# 余白をスッキリさせ、クリックした文字に変化をつけやすくするCSS
 st.markdown("""
     <style>
     .block-container {
@@ -20,7 +20,6 @@ st.markdown("""
     hr {
         margin: 0.3rem 0 !important;
     }
-    /* 横スクロール対応のコンパクトテーブル */
     .table-scroll {
         overflow-x: auto;
         width: 100%;
@@ -59,7 +58,6 @@ st.markdown("""
 
 st.title("📋 見学ケース必要項目数早見表")
 
-# セッション状態の初期化
 if "checks" not in st.session_state:
     st.session_state.checks = {}
 
@@ -75,11 +73,8 @@ def render_html_section(title, items, max_cols=15):
     for row in items:
         item_name = row[0]
         need_count = row[1]
-        is_sub = row[2] if len(row) > 2 else False # 内訳項目のインデント用
         
-        display_name = f" └ {item_name}" if is_sub else item_name
-        
-        html += f'<tr><td>{display_name}</td><td>{need_count}</td>'
+        html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
         for i in range(max_cols):
             if i < need_count:
                 key = f"{title}_{item_name}_{i}"
@@ -95,15 +90,14 @@ def render_html_section(title, items, max_cols=15):
 with st.form("check_form"):
     
     # ==========================================
-    # 1. 保存・治療科（CR修復の内訳を整理）
+    # 1. 保存・治療科（CR修復の全体15マスを削除し内訳のみに）
     # ==========================================
     hozon_items = [
         ("覆髄法", 2), 
         ("抜髄法", 2), 
         ("感染根管治療", 5), 
-        ("CR修復 (合計15点)", 15),
-        ("2級窩洞以外", 13, True),  # 内訳
-        ("2級窩洞", 2, True),       # 内訳
+        (" └ 2級窩洞以外", 13),
+        (" └ 2級窩洞", 2),
         ("インレー修復", 2),
         ("感染チェア", 1),
         ("マイクロの使用", 2),
@@ -131,20 +125,20 @@ with st.form("check_form"):
     render_html_section("口腔補綴科", hotetsu_items, max_cols=11)
 
     # ==========================================
-    # 4. 咀嚼補綴科
+    # 4. 咀嚼補綴科（F・Pはそれぞれ1つずつで計2マスに）
     # ==========================================
     soshaku_items = [
-        ("口腔内検査・概形印象 (F・P)", 1), 
-        ("筋圧形成・最終印象 (F・P)", 1),
-        ("咬合採得 (F・P)", 1), 
+        ("口腔内検査・概形印象 (F)", 1), ("口腔内検査・概形印象 (P)", 1),
+        ("筋圧形成・最終印象 (F)", 1), ("筋圧形成・最終印象 (P)", 1),
+        ("咬合採得 (F)", 1), ("咬合採得 (P)", 1),
         ("ゴシックアーチ (F)", 1),
-        ("人工歯配列試適 (F)", 1), 
-        ("装着・患者指導 (F・P)", 1),
-        ("調整・経過観察 (F・P)", 1), 
+        ("人工歯配列試適 (F)", 1),
+        ("装着・患者指導 (F)", 1), ("装着・患者指導 (P)", 1),
+        ("調整・経過観察 (F)", 1), ("調整・経過観察 (P)", 1),
         ("補綴前処置 (P)", 1),
-        ("支台装置・義歯試適 (P)", 1), 
+        ("支台装置・義歯試適 (P)", 1),
         ("義歯修理・リライン(各1必須)", 3),
-        ("リコール", 2), 
+        ("リコール", 2),
         ("専門外来(顎顔面補綴)", 1),
     ]
     render_html_section("咀嚼補綴科", soshaku_items, max_cols=3)
@@ -167,13 +161,33 @@ with st.form("check_form"):
     render_html_section("小児歯科", shoni_items, max_cols=5)
 
     # ==========================================
-    # 7. 放射線科
+    # 7. 放射線科（撮影見学を追加し、文字クリックでチェックできるように）
     # ==========================================
     houshasen_items = [
         ("口内法スケッチ", 5), ("口外法スケッチ", 5),
         ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10),
     ]
     render_html_section("放射線科", houshasen_items, max_cols=10)
+
+    st.markdown("### ★ 放射線科：撮影見学")
+    st.caption("※ 項目名（文字）をタップするとチェックが入り、文字色が変わります。")
+    
+    kengaku_list = [
+        "パノラマXp", "セファロ撮影", "顎関節撮影", "頭頸部撮影", 
+        "MBCT", "CBCT", "MRI 顎関節", "MRI 頭頸部", "放射線治療"
+    ]
+    
+    # 3列に並べて、文字（ラベル付きチェックボックス）で直感的に押せるようにする
+    k_cols = st.columns(3)
+    for idx, name in enumerate(kengaku_list):
+        with k_cols[idx % 3]:
+            key = f"放射線科_撮影見学_{name}"
+            checked = st.session_state.checks.get(key, False)
+            # 文字をタップしてチェックON/OFFできるようにする
+            new_val = st.checkbox(name, key=key)
+            # チェックが入ったら文字色が変わるようなスタイルを適用
+            if new_val:
+                st.markdown(f"<style>div[data-testid='stCheckbox'] label span {{ color: #1565c0; font-weight: bold; }}</style>", unsafe_allow_html=True)
 
     # ==========================================
     # 8. その他各科・当番系
