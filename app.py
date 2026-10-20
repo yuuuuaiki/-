@@ -77,7 +77,7 @@ def get_gspread_client():
             scopes=SCOPES
         )
         return gspread.authorize(credentials)
-    except Exception as e:
+    except Exception:
         return None
 
 def load_data_from_sheet(sheet_name="見学ケースデータ"):
@@ -89,7 +89,7 @@ def load_data_from_sheet(sheet_name="見学ケースデータ"):
         records = sh.get_all_records()
         data = {}
         for row in records:
-            data[row["key"]] = row["val"] == "1"
+            data[row["key"]] = row["val"] == 1 or row["val"] == "1"
         return data
     except Exception:
         return {}
@@ -106,14 +106,14 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
             sh.update_cell(cell.row, 2, val_str)
         else:
             sh.append_row([key, val_str])
-    except Exception as e:
+    except Exception:
         pass
 
-# セッション状態の初期化（初回起動時にスプレッドシートから読み込む）
+# セッション状態の初期化
 if "checks" not in st.session_state:
     st.session_state.checks = load_data_from_sheet()
 
-# チェックボックス変更時の保存関数
+# チェックボックス変更時のクエリパラメータ連携
 if "submitted_key" in st.query_params:
     changed_key = st.query_params["submitted_key"]
     new_val = st.query_params.get(changed_key) == "1"
@@ -124,7 +124,7 @@ if "submitted_key" in st.query_params:
 def render_html_section(title, items, max_cols=15):
     st.markdown(f"### ★ {title}")
     
-    html = f'<div class="table-scroll"><table class="custom-table">'
+    html = '<div class="table-scroll"><table class="custom-table">'
     html += '<tr><th>項目</th><th>必要</th>'
     for i in range(max_cols):
         html += f'<th>{i+1}</th>'
@@ -145,8 +145,6 @@ def render_html_section(title, items, max_cols=15):
                     is_checked = st.session_state.checks.get(key, False)
                     checked_attr = "checked" if is_checked else ""
                     next_val = "0" if is_checked else "1"
-                    
-                    # タップしたらURLクエリ経由で自動保存を発動させる処理
                     html += f'<td><input type="checkbox" {checked_attr} onchange="window.location.href=\'?submitted_key={key}&{key}={next_val}\'"></td>'
                 else:
                     html += '<td class="empty-cell"></td>'
@@ -197,4 +195,55 @@ render_html_section("口腔補綴科", hotetsu_items, max_cols=11)
 soshaku_items = [
     ("口腔内検査・概形印象 (F)", 1), ("口腔内検査・概形印象 (P)", 1),
     ("筋圧形成・最終印象 (F)", 1), ("筋圧形成・最終印象 (P)", 1),
-    ("咬合採得 (F)", 1), ("咬合採得
+    ("咬合採得 (F)", 1), ("咬合採得 (P)", 1),
+    ("ゴシックアーチ (F)", 1),
+    ("人工歯配列試適 (F)", 1),
+    ("装着・患者指導 (F)", 1), ("装着・患者指導 (P)", 1),
+    ("調整・経過観察 (F)", 1), ("調整・経過観察 (P)", 1),
+    ("補綴前処置 (P)", 1),
+    ("支台装置・義歯試適 (P)", 1),
+    ("義歯修理・リライン(各1必須)", 3),
+    ("リコール", 2),
+    ("専門外来 (顎顔面補綴、口唇口蓋裂)", 1),
+]
+render_html_section("咀嚼補綴科", soshaku_items, max_cols=3)
+
+# ==========================================
+# 5. 予防歯科
+# ==========================================
+render_html_section("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)], max_cols=5)
+
+# ==========================================
+# 6. 小児歯科
+# ==========================================
+shoni_items = [
+    ("リコール (12月まで)", 2), ("リコール (3月まで)", 3), ("リコール (6月まで)", 3), ("リコール (8月まで)", 2),
+    ("CR修復 (12月まで)", 2), ("CR修復 (3月まで)", 3), ("CR修復 (6月まで)", 3), ("CR修復 (8月まで)", 2),
+    ("断髄・抜髄・RCT (12月まで)", 2), ("断髄・抜髄・RCT (3月まで)", 3), ("断髄・抜髄・RCT (6月まで)", 3), ("断髄・抜髄・RCT (8月まで)", 2),
+    ("乳歯冠・義歯 (12月まで)", 2), ("乳歯冠・義歯 (3月まで)", 3), ("乳歯冠・義歯 (6月まで)", 3), ("乳歯冠・義歯 (8月まで)", 2),
+    ("外科処置・抜歯 (12月まで)", 2), ("外科処置・抜歯 (3月まで)", 3), ("外科処置・抜歯 (6月まで)", 3), ("外科処置・抜歯 (8月まで)", 2),
+]
+render_html_section("小児歯科", shoni_items, max_cols=5)
+
+# ==========================================
+# 7. 放射線科
+# ==========================================
+render_html_section("放射線科", [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)], max_cols=10)
+
+st.markdown("### ★ 放射線科：撮影見学")
+kengaku_list = [
+    "パノラマXp", "セファロ撮影", "顎関節撮影", "頭頸部撮影", 
+    "MBCT", "CBCT", "MRI 顎関節", "MRI 頭頸部", "放射線治療"
+]
+k_cols = st.columns(3)
+for idx, name in enumerate(kengaku_list):
+    with k_cols[idx % 3]:
+        key = f"放射線科_撮影見学_{name}"
+        is_checked = st.session_state.checks.get(key, False)
+        new_val = st.checkbox(name, key=key, value=is_checked)
+        if new_val != is_checked:
+            st.session_state.checks[key] = new_val
+            save_key_to_sheet(key, new_val)
+
+# ==========================================
+# 8. その他各科・当番系
