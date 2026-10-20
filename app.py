@@ -1,156 +1,238 @@
 import streamlit as st
-import requests
-import pandas as pd
 
-st.set_page_config(page_title="病院実習 症例進捗チェッカー", layout="centered", initial_sidebar_state="collapsed")
-st.title("🩺 病院実習 症例進捗チェッカー")
+st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-API_URL = st.secrets.get("api_url", "")
+st.title("📋 見学ケース必要項目数早見表")
+st.caption("各項目の四角（マス）をタップ・クリックしてチェックを入れる／外すことができます。")
 
-if not API_URL:
-    st.error("Secretsに api_url が設定されていません。")
-    st.stop()
+# CSSでチェックボックスを大きめのボタン風にスタイリング
+st.markdown("""
+    <style>
+    .stCheckbox {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        align-items: center;
+        margin-bottom: 4px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-def load_data():
-    res = requests.get(API_URL, allow_redirects=True)
-    data = res.json()
-    return pd.DataFrame(data)
-
-def save_data(df):
-    clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
-    records = clean_df.to_dict(orient="records")
-    requests.post(API_URL, json=records, allow_redirects=True)
-
-def format_deadline(val):
-    if pd.isna(val) or str(val).strip() == "":
-        return ""
-    return str(val).split("T")[0]
-
-try:
-    df = load_data()
-    if df.empty:
-        df = pd.DataFrame(columns=["id", "name", "target", "current", "deadline"])
-    if "deadline" not in df.columns:
-        df["deadline"] = ""
-    df["target"] = pd.to_numeric(df["target"], errors="coerce").fillna(0).astype(int)
-    df["current"] = pd.to_numeric(df["current"], errors="coerce").fillna(0).astype(int)
-except Exception as e:
-    st.error("データの読み込みに失敗しました。")
-    st.write("エラー詳細:", e)
-    st.stop()
-
-tab1, tab2 = st.tabs(["📊 進捗確認", "⚙️ 科目の追加・編集"])
-
-# --- タブ1: 進捗確認 ---
-with tab1:
-    st.subheader("現在の進捗状況")
-    
-    total_target = df["target"].sum()
-    total_current = df["current"].sum()
-    total_progress = (total_current / total_target) if total_target > 0 else 0.0
-
-    st.metric("全体の達成率", f"{int(total_progress * 100)}%", f"{total_current} / {total_target} ケース")
-    st.progress(min(total_progress, 1.0))
+def render_grid_section(section_title, items, max_cols=15):
+    """標準的なチェックボックスグリッドを描画する関数"""
+    st.subheader(f"★ {section_title}")
+    for item_name, count in items:
+        cols = st.columns([3, 1.5] + [1] * max_cols)
+        with cols[0]:
+            st.write(f"**{item_name}**")
+        with cols[1]:
+            st.caption(f"必要: {count}")
+        for i in range(count):
+            with cols[2 + i]:
+                key = f"{section_title}_{item_name}_{i}"
+                st.checkbox("", key=key, label_visibility="collapsed")
     st.divider()
 
-    if not df.empty:
-        # 「診療科：処置名」の形式でグループ分け
-        df["category"] = df["name"].apply(lambda x: str(x).split("：")[0] if "：" in str(x) else (str(x).split(":")[0] if ":" in str(x) else "その他"))
-        df["sub_name"] = df["name"].apply(lambda x: str(x).split("：")[1] if "：" in str(x) else (str(x).split(":")[1] if ":" in str(x) else str(x)))
+# ==========================================
+# 1. 保存・治療科
+# ==========================================
+hozon_items = [
+    ("覆髄法", 2),
+    ("抜髄法", 2),
+    ("感染根管治療", 5),
+    ("CR修復", 15),
+    ("2級窩洞以外", 13),
+    ("2級窩洞", 2),
+    ("インレー修復", 2),
+    ("感染チェア", 1),
+    ("マイクロの使用", 2),
+    ("歯周外科症例見学", 2),
+]
+render_grid_section("保存・治療科", hozon_items, max_cols=15)
 
-        categories = df["category"].unique()
+# ==========================================
+# 2. 第一口腔外科・第二口腔外科
+# ==========================================
+geka1_items = [
+    ("抜歯症例", 2),
+    ("外科外来症例", 2),
+    ("入院患者症例", 2),
+]
+render_grid_section("第一口腔外科", geka1_items, max_cols=5)
 
-        for cat in categories:
-            cat_df = df[df["category"] == cat]
-            
-            with st.expander(f"📌 {cat}（{cat_df['current'].sum()} / {cat_df['target'].sum()}）", expanded=True):
-                for idx, row in cat_df.iterrows():
-                    dept = row["sub_name"]
-                    target = int(row["target"])
-                    current = int(row["current"])
-                    raw_deadline = row.get("deadline", "")
-                    deadline = format_deadline(raw_deadline)
-                    progress = (current / target) if target > 0 else 0.0
+geka2_items = [
+    ("抜歯症例", 2),
+    ("外科外来症例", 3),
+    ("入院患者症例", 1),
+]
+render_grid_section("第二口腔外科", geka2_items, max_cols=5)
 
-                    st.write(f"**{dept}**" + (f" 🕒 締切: {deadline}" if deadline else "") + f" ({current} / {target})")
-                    st.progress(min(progress, 1.0))
+# ==========================================
+# 3. 口腔補綴科
+# ==========================================
+hotetsu_items = [
+    ("医療面接", 3),
+    ("資料獲得", 3),
+    ("診断・カウンセリング", 3),
+    ("補綴前処置", 3),
+    ("補綴物除去", 3),
+    ("暫間補綴", 3),
+    ("支台築造", 3),
+    ("形成", 3),
+    ("印象・咬合採得", 3),
+    ("試適装着", 3),
+    ("インプラント補綴", 3),
+    ("IOS実習", 1),
+    ("その他・受付・余剰分", 11),
+    ("補綴難処置", 1),
+    ("TMD症例", 1),
+    ("インプラント症例", 1),
+    ("デジタルデンティストリ", 1),
+]
+render_grid_section("口腔補綴科", hotetsu_items, max_cols=11)
 
-                    col_plus, col_minus, _ = st.columns([1, 1, 2])
-                    with col_plus:
-                        if st.button("＋1", key=f"btn_plus_{row['id']}"):
-                            df.loc[df['id'] == row['id'], "current"] = current + 1
-                            save_data(df)
-                            st.rerun()
-                    with col_minus:
-                        if st.button("ー1", key=f"btn_minus_{row['id']}"):
-                            if current > 0:
-                                df.loc[df['id'] == row['id'], "current"] = current - 1
-                                save_data(df)
-                                st.rerun()
-                    st.divider()
+# ==========================================
+# 4. 咀嚼補綴科
+# ==========================================
+st.subheader("★ 咀嚼補綴科")
+soshaku_items = [
+    ("口腔内検査・概形印象", 1, "F・P"),
+    ("筋圧形成・最終印象", 1, "F・P"),
+    ("咬合採得", 1, "F・P"),
+    ("ゴシックアーチ", 1, "F"),
+    ("人工歯配列試適", 1, "F"),
+    ("装着・患者指導", 1, "F・P"),
+    ("調整・経過観察", 1, "F・P"),
+    ("補綴前処置", 1, "P"),
+    ("支台装置・義歯試適", 1, "P"),
+    ("義歯修理・リライン（最低各1個必須）", 3, ""),
+    ("リコール", 2, ""),
+    ("専門外来（顎顔面補綴）", 1, ""),
+]
 
-# --- タブ2: 科目の追加・編集 ---
-with tab2:
-    st.subheader("新しい科目を追加")
-    st.caption("※「小児歯科：CR修復」のように『科名：処置名』で入力するとグループ分けされます！")
-    
-    with st.form("add_dept_form", clear_on_submit=True):
-        new_name = st.text_input("科名・処置名（例: 小児歯科：CR修復）")
-        new_target = st.number_input("目標ケース数", min_value=1, value=2, step=1)
-        new_deadline = st.text_input("時期・締切（例: 12月まで / 2026-12-31）")
-        submitted = st.form_submit_button("科目を追加する")
-        
-        if submitted and new_name:
-            clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
-            max_id = pd.to_numeric(clean_df["id"], errors="coerce").max()
-            next_id = int(max_id + 1) if pd.notna(max_id) else 1
-            
-            new_row = {
-                "id": next_id,
-                "name": new_name,
-                "target": new_target,
-                "current": 0,
-                "deadline": new_deadline
-            }
-            clean_df = pd.concat([clean_df, pd.DataFrame([new_row])], ignore_index=True)
-            save_data(clean_df)
-            st.success(f"「{new_name}」を追加しました！")
-            st.rerun()
+for item_name, count, note in soshaku_items:
+    cols = st.columns([3.5, 1.5, 1.5] + [1] * 5)
+    with cols[0]:
+        st.write(f"**{item_name}**")
+    with cols[1]:
+        st.caption(f"必要: {count}")
+    with cols[2]:
+        if note:
+            st.caption(f"({note})")
+    for i in range(count):
+        with cols[3 + i]:
+            key = f"咀嚼補綴科_{item_name}_{i}"
+            st.checkbox("", key=key, label_visibility="collapsed")
+st.divider()
 
-    st.divider()
-    st.subheader("登録済みの科目を編集・削除")
-    
-    clean_df = df.drop(columns=["category", "sub_name"], errors="ignore")
-    for idx, row in clean_df.iterrows():
-        # 科目名・目標数・締切を並べて編集できるように修正
-        new_name_val = st.text_input("科名・処置名", value=str(row.get("name", "")), key=f"name_edit_{row['id']}")
-        
-        col_target, col_dead, col_del = st.columns([2, 3, 1])
-        
-        with col_target:
-            new_target_val = st.number_input("目標数", min_value=0, value=int(row["target"]), key=f"target_edit_{row['id']}")
-        
-        with col_dead:
-            current_dead = format_deadline(row.get("deadline", ""))
-            new_dead_val = st.text_input("締切・時期", value=str(current_dead), key=f"dead_edit_{row['id']}")
-            
-        with col_del:
-            st.write("")
-            st.write("")
-            if st.button("削除", key=f"del_edit_{row['id']}"):
-                clean_df = clean_df[clean_df["id"] != row["id"]]
-                save_data(clean_df)
-                st.rerun()
+# ==========================================
+# 5. 予防歯科
+# ==========================================
+yobou_items = [
+    ("見学実習（10-1月まで）", 2),
+    ("当番（2-10月まで）", 5),
+]
+render_grid_section("予防歯科", yobou_items, max_cols=5)
 
-        # 科名・目標数・締切のどれかが変更されたら自動保存
-        if (new_name_val != row["name"] or 
-            new_target_val != row["target"] or 
-            new_dead_val != current_dead):
-            
-            clean_df.loc[clean_df["id"] == row["id"], "name"] = new_name_val
-            clean_df.loc[clean_df["id"] == row["id"], "target"] = new_target_val
-            clean_df.loc[clean_df["id"] == row["id"], "deadline"] = new_dead_val
-            save_data(clean_df)
-            st.rerun()
+# ==========================================
+# 6. 小児歯科
+# ==========================================
+st.subheader("★ 小児歯科")
+shoni_sections = [
+    ("リコール", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
+    ("CR修復", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
+    ("断髄・抜髄・RCT", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
+    ("乳歯冠・義歯", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
+    ("外科処置・抜歯", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
+]
 
-        st.divider()
+for sub_title, sub_items in shoni_sections:
+    st.write(f"**【{sub_title}】**")
+    for period, count in sub_items:
+        cols = st.columns([3, 1.5] + [1] * 5)
+        with cols[0]:
+            st.write(f"・{period}")
+        with cols[1]:
+            st.caption(f"必要: {count}")
+        for i in range(count):
+            with cols[2 + i]:
+                key = f"小児歯科_{sub_title}_{period}_{i}"
+                st.checkbox("", key=key, label_visibility="collapsed")
+st.divider()
+
+# ==========================================
+# 7. 放射線科
+# ==========================================
+st.subheader("★ 放射線科")
+houshasen_items = [
+    ("口内法スケッチ", 5),
+    ("口外法スケッチ", 5),
+    ("口外法スケッチ（CT・MRI含む）", 5),
+    ("口内法デンタル撮影", 10),
+]
+for item_name, count in houshasen_items:
+    cols = st.columns([4, 1.5] + [1] * 10)
+    with cols[0]:
+        st.write(f"**{item_name}**")
+    with cols[1]:
+        st.caption(f"必要: {count}")
+    for i in range(count):
+        with cols[2 + i]:
+            key = f"放射線科_{item_name}_{i}"
+            st.checkbox("", key=key, label_visibility="collapsed")
+
+st.write("**撮影見学**")
+houshasen_kengaku = ["パノラマXp", "セファロ撮影", "顎関節撮影", "頭頸部撮影", "MBCT", "CBCT", "MRI 顎関節", "MRI 頭頸部", "放射線治療"]
+kengaku_cols = st.columns(3)
+for idx, name in enumerate(houshasen_kengaku):
+    with kengaku_cols[idx % 3]:
+        key = f"放射線科_撮影見学_{name}"
+        st.checkbox(name, key=key)
+st.divider()
+
+# ==========================================
+# 8. 歯科麻酔科・顎口腔機能治療部・障害者歯科・矯正科・当番系
+# ==========================================
+masui_items = [
+    ("入院患者全身麻酔", 1),
+    ("精神鎮静法", 1),
+    ("ペインクリニック", 1),
+]
+render_grid_section("歯科麻酔科", masui_items, max_cols=3)
+
+kinou_items = [
+    ("見学", 10),
+    ("ドライマウスdisc.", 1),
+    ("嚥下disc.", 1),
+    ("SASdisc.", 1),
+    ("発音・構音disc.", 1),
+]
+render_grid_section("顎口腔機能治療部", kinou_items, max_cols=10)
+
+shougai_items = [
+    ("見学", 5),
+]
+render_grid_section("障害者歯科", shougai_items, max_cols=5)
+
+kyousei_items = [
+    ("配当", 3),
+    ("EW以外の装置", 2),
+    ("EW見学", 1),
+]
+render_grid_section("矯正科", kyousei_items, max_cols=3)
+
+st.subheader("★ 当番・研修関連")
+st.write("・**検査部**： 1回 当番組んでくれる")
+st.checkbox("検査部 当番完了", key="toban_kensa")
+st.write("・**口腔総合診療部**： 7回 当番組んでくれる")
+toban_cols = st.columns(7)
+for i in range(7):
+    with toban_cols[i]:
+        st.checkbox(f"{i+1}回目", key=f"toban_sougou_{i}")
+st.write("・**医学部病院**： 2回 当番組んでくれる")
+toban_med_cols = st.columns(2)
+for i in range(2):
+    with toban_med_cols[i]:
+        st.checkbox(f"{i+1}回目", key=f"toban_med_{i}")
