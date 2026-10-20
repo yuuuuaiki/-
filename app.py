@@ -1,4 +1,6 @@
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
@@ -64,13 +66,65 @@ st.markdown("""
 
 st.title("📋 見学ケース必要項目数早見表")
 
-# URLパラメータ（query_params）から保存されたチェック状態を読み込む
-saved_data = st.query_params
+# --- Google スプレッドシート連携処理 ---
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+@st.cache_resource
+def get_gspread_client():
+    try:
+        credentials = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=SCOPES
+        )
+        return gspread.authorize(credentials)
+    except Exception as e:
+        return None
+
+def load_data_from_sheet(sheet_name="見学ケースデータ"):
+    client = get_gspread_client()
+    if not client:
+        return {}
+    try:
+        sh = client.open(sheet_name).sheet1
+        records = sh.get_all_records()
+        data = {}
+        for row in records:
+            data[row["key"]] = row["val"] == "1"
+        return data
+    except Exception:
+        return {}
+
+def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
+    client = get_gspread_client()
+    if not client:
+        return
+    try:
+        sh = client.open(sheet_name).sheet1
+        cell = sh.find(key)
+        val_str = "1" if value else "0"
+        if cell:
+            sh.update_cell(cell.row, 2, val_str)
+        else:
+            sh.append_row([key, val_str])
+    except Exception as e:
+        pass
+
+# セッション状態の初期化（初回起動時にスプレッドシートから読み込む）
+if "checks" not in st.session_state:
+    st.session_state.checks = load_data_from_sheet()
+
+# チェックボックス変更時の保存関数
+if "submitted_key" in st.query_params:
+    changed_key = st.query_params["submitted_key"]
+    new_val = st.query_params.get(changed_key) == "1"
+    st.session_state.checks[changed_key] = new_val
+    save_key_to_sheet(changed_key, new_val)
+    st.query_params.clear()
 
 def render_html_section(title, items, max_cols=15):
     st.markdown(f"### ★ {title}")
     
-    html = f'<form method="get"><div class="table-scroll"><table class="custom-table">'
+    html = f'<div class="table-scroll"><table class="custom-table">'
     html += '<tr><th>項目</th><th>必要</th>'
     for i in range(max_cols):
         html += f'<th>{i+1}</th>'
@@ -88,14 +142,17 @@ def render_html_section(title, items, max_cols=15):
             for i in range(max_cols):
                 if i < need_count:
                     key = f"{title}_{item_name}_{i}"
-                    is_checked = saved_data.get(key) == "1"
+                    is_checked = st.session_state.checks.get(key, False)
                     checked_attr = "checked" if is_checked else ""
-                    html += f'<td><input type="checkbox" name="{key}" value="1" {checked_attr} onchange="this.form.submit()"></td>'
+                    next_val = "0" if is_checked else "1"
+                    
+                    # タップしたらURLクエリ経由で自動保存を発動させる処理
+                    html += f'<td><input type="checkbox" {checked_attr} onchange="window.location.href=\'?submitted_key={key}&{key}={next_val}\'"></td>'
                 else:
                     html += '<td class="empty-cell"></td>'
             html += '</tr>'
     
-    html += '</table></div></form>'
+    html += '</table></div>'
     st.markdown(html, unsafe_allow_html=True)
 
 # ==========================================
@@ -140,80 +197,4 @@ render_html_section("口腔補綴科", hotetsu_items, max_cols=11)
 soshaku_items = [
     ("口腔内検査・概形印象 (F)", 1), ("口腔内検査・概形印象 (P)", 1),
     ("筋圧形成・最終印象 (F)", 1), ("筋圧形成・最終印象 (P)", 1),
-    ("咬合採得 (F)", 1), ("咬合採得 (P)", 1),
-    ("ゴシックアーチ (F)", 1),
-    ("人工歯配列試適 (F)", 1),
-    ("装着・患者指導 (F)", 1), ("装着・患者指導 (P)", 1),
-    ("調整・経過観察 (F)", 1), ("調整・経過観察 (P)", 1),
-    ("補綴前処置 (P)", 1),
-    ("支台装置・義歯試適 (P)", 1),
-    ("義歯修理・リライン(各1必須)", 3),
-    ("リコール", 2),
-    ("専門外来 (顎顔面補綴、口唇口蓋裂)", 1),
-]
-render_html_section("咀嚼補綴科", soshaku_items, max_cols=3)
-
-# ==========================================
-# 5. 予防歯科
-# ==========================================
-render_html_section("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)], max_cols=5)
-
-# ==========================================
-# 6. 小児歯科
-# ==========================================
-shoni_items = [
-    ("リコール (12月まで)", 2), ("リコール (3月まで)", 3), ("リコール (6月まで)", 3), ("リコール (8月まで)", 2),
-    ("CR修復 (12月まで)", 2), ("CR修復 (3月まで)", 3), ("CR修復 (6月まで)", 3), ("CR修復 (8月まで)", 2),
-    ("断髄・抜髄・RCT (12月まで)", 2), ("断髄・抜髄・RCT (3月まで)", 3), ("断髄・抜髄・RCT (6月まで)", 3), ("断髄・抜髄・RCT (8月まで)", 2),
-    ("乳歯冠・義歯 (12月まで)", 2), ("乳歯冠・義歯 (3月まで)", 3), ("乳歯冠・義歯 (6月まで)", 3), ("乳歯冠・義歯 (8月まで)", 2),
-    ("外科処置・抜歯 (12月まで)", 2), ("外科処置・抜歯 (3月まで)", 3), ("外科処置・抜歯 (6月まで)", 3), ("外科処置・抜歯 (8月まで)", 2),
-]
-render_html_section("小児歯科", shoni_items, max_cols=5)
-
-# ==========================================
-# 7. 放射線科
-# ==========================================
-render_html_section("放射線科", [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)], max_cols=10)
-
-st.markdown("### ★ 放射線科：撮影見学")
-kengaku_list = [
-    "パノラマXp", "セファロ撮影", "顎関節撮影", "頭頸部撮影", 
-    "MBCT", "CBCT", "MRI 顎関節", "MRI 頭頸部", "放射線治療"
-]
-k_cols = st.columns(3)
-for idx, name in enumerate(kengaku_list):
-    with k_cols[idx % 3]:
-        key = f"放射線科_撮影見学_{name}"
-        is_checked = saved_data.get(key) == "1"
-        if st.checkbox(name, key=key, value=is_checked):
-            st.query_params[key] = "1"
-        else:
-            if key in st.query_params:
-                del st.query_params[key]
-
-# ==========================================
-# 8. その他各科・当番系
-# ==========================================
-render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
-render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
-render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
-render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
-
-st.markdown("### ★ 当番・研修関連")
-toban_items = [
-    ("検査部（1回）", 1, "toban_kensa"),
-    ("口腔総合診療部（7回）", 7, "toban_sougou"),
-    ("医学部病院（2回）", 2, "toban_med")
-]
-for label, count, prefix in toban_items:
-    st.markdown(f"・**{label}**")
-    cols = st.columns(max(count, 1))
-    for i in range(count):
-        key = f"{prefix}_{i}"
-        is_checked = saved_data.get(key) == "1"
-        with cols[i]:
-            if st.checkbox(f"{i+1}回", key=key, value=is_checked):
-                st.query_params[key] = "1"
-            else:
-                if key in st.query_params:
-                    del st.query_params[key]
+    ("咬合採得 (F)", 1), ("咬合採得
