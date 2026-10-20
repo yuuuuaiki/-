@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 余白をスッキリさせ、コンパクトに表示するCSS
+# 余白を詰め、テーブルとチェックボックスを綺麗に馴染ませるCSS
 st.markdown("""
     <style>
     .block-container {
@@ -12,8 +12,8 @@ st.markdown("""
         padding-right: 0.5rem;
     }
     h2, h3 {
-        margin-top: 0.4rem !important;
-        margin-bottom: 0.1rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.2rem !important;
         font-size: 0.95rem !important;
         color: #111;
     }
@@ -23,7 +23,7 @@ st.markdown("""
     .table-scroll {
         overflow-x: auto;
         width: 100%;
-        margin-bottom: 0.4rem;
+        margin-bottom: 0.5rem;
     }
     .custom-table {
         width: 100%;
@@ -32,21 +32,22 @@ st.markdown("""
     }
     .custom-table th, .custom-table td {
         border: 1px solid #999;
-        padding: 3px 5px;
+        padding: 2px 4px;
         text-align: center;
         white-space: nowrap;
-        height: 24px;
+        height: 28px;
     }
     .custom-table th:first-child, .custom-table td:first-child {
         text-align: left;
         font-weight: bold;
         background-color: #f7f7f7;
         min-width: 160px;
+        padding-left: 6px;
     }
     .custom-table th:nth-child(2), .custom-table td:nth-child(2) {
         text-align: center;
         background-color: #f7f7f7;
-        min-width: 50px;
+        min-width: 45px;
         font-size: 0.75rem;
         color: #555;
     }
@@ -68,19 +69,19 @@ st.title("📋 見学ケース必要項目数早見表")
 if "checks" not in st.session_state:
     st.session_state.checks = {}
 
-# チェックボックス変更時の自動保存コールバック関数
 def update_check(key):
     st.session_state.checks[key] = st.session_state[key]
 
 def render_section(title, items, max_cols=15):
     st.markdown(f"### ★ {title}")
     
-    # 横スクロール可能なテーブル構造
-    html = '<div class="table-scroll"><table class="custom-table">'
-    html += '<tr><th>項目</th><th>必要</th>'
+    # 紙の表形式のヘッダー作成
+    header_html = '<div class="table-scroll"><table class="custom-table">'
+    header_html += '<tr><th>項目</th><th>必要</th>'
     for i in range(max_cols):
-        html += f'<th>{i+1}</th>'
-    html += '</tr>'
+        header_html += f'<th>{i+1}</th>'
+    header_html += '</tr>'
+    st.markdown(header_html, unsafe_allow_html=True)
     
     for row in items:
         item_name = row[0]
@@ -88,34 +89,26 @@ def render_section(title, items, max_cols=15):
         is_header = row[2] if len(row) > 2 else False
         
         if is_header:
-            html += f'<tr><td colspan="{max_cols + 2}" class="header-row">{item_name}</td></tr>'
+            # マス無しの見出し行
+            st.markdown(f'<div class="table-scroll"><table class="custom-table"><tr class="header-row"><td colspan="{max_cols + 2}"><b>{item_name}</b></td></tr></table></div>', unsafe_allow_html=True)
         else:
-            html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
-            for i in range(max_cols):
-                if i < need_count:
-                    # 後からプレースホルダー領域に書き込むための目印（プレースホルダー）を置く
-                    html += f'<td id="cell_{title}_{item_name}_{i}"></td>'
-                else:
-                    html += '<td class="empty-cell"></td>'
-            html += '</tr>'
+            # 1行分のレイアウト（項目名・必要数 + チェックボックスをカラムで綺麗に並べる）
+            cols = st.columns([1.6, 0.45] + [1] * max_cols)
+            with cols[0]:
+                st.markdown(f"<div style='font-size:0.8rem; font-weight:bold; padding:4px 0;'>{item_name}</div>", unsafe_allow_html=True)
+            with cols[1]:
+                st.markdown(f"<div style='font-size:0.75rem; color:#555; text-align:center; padding:4px 0;'>{need_count}</div>", unsafe_allow_html=True)
             
-    html += '</table></div>'
-    st.markdown(html, unsafe_allow_html=True)
-
-    # 実際のStreamlitチェックボックスを配置（自動保存対応）
-    for row in items:
-        item_name = row[0]
-        need_count = row[1]
-        is_header = row[2] if len(row) > 2 else False
-        
-        if not is_header:
-            for i in range(need_count):
-                key = f"{title}_{item_name}_{i}"
-                if key not in st.session_state.checks:
-                    st.session_state.checks[key] = False
-                
-                # st.checkboxを配置し、変更があったら即座にon_changeで保存
-                st.checkbox("", key=key, value=st.session_state.checks[key], on_change=update_check, args=(key,), label_visibility="collapsed")
+            for i in range(max_cols):
+                with cols[2 + i]:
+                    if i < need_count:
+                        key = f"{title}_{item_name}_{i}"
+                        if key not in st.session_state.checks:
+                            st.session_state.checks[key] = False
+                        st.checkbox("", key=key, value=st.session_state.checks[key], on_change=update_check, args=(key,), label_visibility="collapsed")
+                    else:
+                        # 余白のセル
+                        st.markdown("<div style='background-color:#eaeaea; height:24px;'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # 1. 保存・治療科
