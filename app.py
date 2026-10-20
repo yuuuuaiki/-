@@ -88,10 +88,8 @@ def render_html_section(title, items, max_cols=15):
             for i in range(max_cols):
                 if i < need_count:
                     key = f"{title}_{item_name}_{i}"
-                    # 保存されているデータがあればチェックを入れる
                     is_checked = saved_data.get(key) == "1"
                     checked_attr = "checked" if is_checked else ""
-                    # チェックボックスを変更した瞬間にフォームが送信されてURLに状態が保存される
                     html += f'<td><input type="checkbox" name="{key}" value="1" {checked_attr} onchange="this.form.submit()"></td>'
                 else:
                     html += '<td class="empty-cell"></td>'
@@ -187,7 +185,6 @@ for idx, name in enumerate(kengaku_list):
     with k_cols[idx % 3]:
         key = f"放射線科_撮影見学_{name}"
         is_checked = saved_data.get(key) == "1"
-        # Streamlitのネイティブチェックボックスで状態を維持
         if st.checkbox(name, key=key, value=is_checked):
             st.query_params[key] = "1"
         else:
@@ -200,7 +197,7 @@ for idx, name in enumerate(kengaku_list):
 render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
 render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
 render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
-render_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
+render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
 
 st.markdown("### ★ 当番・研修関連")
 toban_items = [
