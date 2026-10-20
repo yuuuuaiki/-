@@ -61,6 +61,17 @@ st.markdown("""
         text-align: left !important;
         padding-left: 8px !important;
     }
+    /* Streamlit標準チェックボックスの余白調整 */
+    div[data-testid="stCheckbox"] {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    div[data-testid="stCheckbox"] > label {
+        padding: 0 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -122,49 +133,61 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
     except Exception:
         pass
 
-# セッション状態の初期化
+# 初回起動時にスプレッドシートから全データをロード
 if "checks" not in st.session_state:
     st.session_state.checks = load_data_from_sheet()
 
-# クエリパラメータによる自動保存の受け取り処理
-if "submitted_key" in st.query_params:
-    changed_key = st.query_params["submitted_key"]
-    new_val = st.query_params.get(changed_key) == "1"
-    st.session_state.checks[changed_key] = new_val
-    save_key_to_sheet(changed_key, new_val)
-    st.query_params.clear()
+def on_check_change(key):
+    # チェック状態変更時に自動でスプレッドシート更新
+    new_val = st.session_state[key]
+    st.session_state.checks[key] = new_val
+    save_key_to_sheet(key, new_val)
 
-def render_html_section(title, items, max_cols=15):
+def render_table_section(title, items, max_cols=15):
     st.markdown(f"### ★ {title}")
     
-    html = '<div class="table-scroll"><table class="custom-table">'
-    html += '<tr><th>項目</th><th>必要</th>'
+    # テーブルヘッダー
+    header_cols = st.columns([3, 1] + [1] * max_cols)
+    with header_cols[0]:
+        st.markdown("**項目**")
+    with header_cols[1]:
+        st.markdown("**必要**")
     for i in range(max_cols):
-        html += f'<th>{i+1}</th>'
-    html += '</tr>'
-    
+        with header_cols[i + 2]:
+            st.markdown(f"**{i+1}**")
+            
+    st.markdown("<hr style='margin:2px 0;'>", unsafe_allow_html=True)
+
+    # テーブル各行
     for row in items:
         item_name = row[0]
         need_count = row[1]
         is_header = row[2] if len(row) > 2 else False
         
+        cols = st.columns([3, 1] + [1] * max_cols)
         if is_header:
-            html += f'<tr class="header-row"><td colspan="{max_cols + 2}"><b>{item_name}</b></td></tr>'
+            with cols[0]:
+                st.markdown(f"**{item_name}**")
         else:
-            html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
+            with cols[0]:
+                st.write(item_name)
+            with cols[1]:
+                st.write(str(need_count))
             for i in range(max_cols):
-                if i < need_count:
-                    key = f"{title}_{item_name}_{i}"
-                    is_checked = st.session_state.checks.get(key, False)
-                    checked_attr = "checked" if is_checked else ""
-                    next_val = "0" if is_checked else "1"
-                    html += f'<td><input type="checkbox" {checked_attr} onchange="window.location.href=\'?submitted_key={key}&{key}={next_val}\'"></td>'
-                else:
-                    html += '<td class="empty-cell"></td>'
-            html += '</tr>'
-    
-    html += '</table></div>'
-    st.markdown(html, unsafe_allow_html=True)
+                with cols[i + 2]:
+                    if i < need_count:
+                        key = f"{title}_{item_name}_{i}"
+                        default_val = st.session_state.checks.get(key, False)
+                        st.checkbox(
+                            "", 
+                            key=key, 
+                            value=default_val, 
+                            on_change=on_check_change, 
+                            args=(key,),
+                            label_visibility="collapsed"
+                        )
+                    else:
+                        st.markdown("<div style='background-color:#eaeaea; height:24px; border-radius:3px;'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # 1. 保存・治療科
@@ -181,13 +204,13 @@ hozon_items = [
     ("マイクロの使用", 2),
     ("歯周外科症例見学", 2),
 ]
-render_html_section("保存・治療科", hozon_items, max_cols=15)
+render_table_section("保存・治療科", hozon_items, max_cols=15)
 
 # ==========================================
 # 2. 第一・第二口腔外科
 # ==========================================
-render_html_section("第一口腔外科", [("抜歯症例", 2), ("外科外来症例", 2), ("入院患者症例", 2)], max_cols=5)
-render_html_section("第二口腔外科", [("抜歯症例", 2), ("外科外来症例", 3), ("入院患者症例", 1)], max_cols=5)
+render_table_section("第一口腔外科", [("抜歯症例", 2), ("外科外来症例", 2), ("入院患者症例", 2)], max_cols=5)
+render_table_section("第二口腔外科", [("抜歯症例", 2), ("外科外来症例", 3), ("入院患者症例", 1)], max_cols=5)
 
 # ==========================================
 # 3. 口腔補綴科
@@ -200,7 +223,7 @@ hotetsu_items = [
     ("その他・受付・余剰分", 11), ("補綴難処置", 1),
     ("TMD症例", 1), ("インプラント症例", 1), ("デジタルデンティストリ", 1),
 ]
-render_html_section("口腔補綴科", hotetsu_items, max_cols=11)
+render_table_section("口腔補綴科", hotetsu_items, max_cols=11)
 
 # ==========================================
 # 4. 咀嚼補綴科
@@ -219,12 +242,12 @@ soshaku_items = [
     ("リコール", 2),
     ("専門外来 (顎顔面補綴、口唇口蓋裂)", 1),
 ]
-render_html_section("咀嚼補綴科", soshaku_items, max_cols=3)
+render_table_section("咀嚼補綴科", soshaku_items, max_cols=3)
 
 # ==========================================
 # 5. 予防歯科
 # ==========================================
-render_html_section("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)], max_cols=5)
+render_table_section("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)], max_cols=5)
 
 # ==========================================
 # 6. 小児歯科
@@ -236,12 +259,12 @@ shoni_items = [
     ("乳歯冠・義歯 (12月まで)", 2), ("乳歯冠・義歯 (3月まで)", 3), ("乳歯冠・義歯 (6月まで)", 3), ("乳歯冠・義歯 (8月まで)", 2),
     ("外科処置・抜歯 (12月まで)", 2), ("外科処置・抜歯 (3月まで)", 3), ("外科処置・抜歯 (6月まで)", 3), ("外科処置・抜歯 (8月まで)", 2),
 ]
-render_html_section("小児歯科", shoni_items, max_cols=5)
+render_table_section("小児歯科", shoni_items, max_cols=5)
 
 # ==========================================
 # 7. 放射線科
 # ==========================================
-render_html_section("放射線科", [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)], max_cols=10)
+render_table_section("放射線科", [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)], max_cols=10)
 
 st.markdown("### ★ 放射線科：撮影見学")
 kengaku_list = [
@@ -252,19 +275,22 @@ k_cols = st.columns(3)
 for idx, name in enumerate(kengaku_list):
     with k_cols[idx % 3]:
         key = f"放射線科_撮影見学_{name}"
-        is_checked = st.session_state.checks.get(key, False)
-        new_val = st.checkbox(name, key=key, value=is_checked)
-        if new_val != is_checked:
-            st.session_state.checks[key] = new_val
-            save_key_to_sheet(key, new_val)
+        default_val = st.session_state.checks.get(key, False)
+        st.checkbox(
+            name, 
+            key=key, 
+            value=default_val, 
+            on_change=on_check_change, 
+            args=(key,)
+        )
 
 # ==========================================
 # 8. その他各科・当番系
 # ==========================================
-render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
-render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
-render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
-render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
+render_table_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
+render_table_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
+render_table_section("障害者歯科", [("見学", 5)], max_cols=5)
+render_table_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
 
 st.markdown("### ★ 当番・研修関連")
 toban_items = [
@@ -277,9 +303,12 @@ for label, count, prefix in toban_items:
     cols = st.columns(max(count, 1))
     for i in range(count):
         key = f"{prefix}_{i}"
-        is_checked = st.session_state.checks.get(key, False)
+        default_val = st.session_state.checks.get(key, False)
         with cols[i]:
-            new_val = st.checkbox(f"{i+1}回", key=key, value=is_checked)
-            if new_val != is_checked:
-                st.session_state.checks[key] = new_val
-                save_key_to_sheet(key, new_val)
+            st.checkbox(
+                f"{i+1}回", 
+                key=key, 
+                value=default_val, 
+                on_change=on_check_change, 
+                args=(key,)
+            )
