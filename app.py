@@ -2,71 +2,86 @@ import streamlit as st
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 紙の表のようなコンパクトさと、マスの横並びを綺麗に保つCSS
+# CSSで横一列の強制とスクロールエリアのスタイリング
 st.markdown("""
     <style>
     .block-container {
         padding-top: 1rem;
         padding-bottom: 2rem;
-        padding-left: 0.8rem;
-        padding-right: 0.8rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
     }
     h3 {
         margin-top: 0.8rem !important;
-        margin-bottom: 0.1rem !important;
-        font-size: 1.05rem !important;
+        margin-bottom: 0.2rem !important;
+        font-size: 1rem !important;
         background-color: #f0f2f6;
         padding: 4px 8px;
         border-radius: 4px;
     }
     hr {
-        margin: 0.5rem 0 !important;
+        margin: 0.4rem 0 !important;
     }
-    /* 行の要素を中央揃え＆隙間を詰める */
-    div[data-testid="stHorizontalBlock"] {
+    /* 表全体を横スクロール可能＆縦落ち防止にするコンテナ */
+    .table-container {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 5px;
+    }
+    /* 各行を強制的に横並びにする */
+    .row-item {
+        display: flex;
         align-items: center;
-        gap: 0.1rem !important;
-        margin-bottom: 1px !important;
+        gap: 6px;
+        margin-bottom: 4px;
     }
-    div[data-testid="stColumn"] {
-        padding: 0px !important;
-        text-align: center;
+    .item-name {
+        min-width: 160px;
+        max-width: 160px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    p {
-        margin-bottom: 0px !important;
-        font-size: 0.9rem;
+    .item-need {
+        min-width: 55px;
+        max-width: 55px;
+        font-size: 0.75rem;
+        color: #666;
     }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📋 見学ケース必要項目数早見表")
+st.caption("※ 画面を横にスワイプすると、全てのマスを確認できます。")
 
-def render_table_section(title, items, total_slots=15):
-    """紙の表と同じように、項目の右側にマスを横一列に並べる関数"""
+# セッション状態の初期化
+if "checks" not in st.session_state:
+    st.session_state.checks = {}
+
+def render_html_table(title, items):
     st.subheader(f"★ {title}")
     
+    # HTMLとStreamlitのウィジェットを組み合わせて横並びを完全固定
     for item_name, need_count in items:
-        # [項目名(幅4), 必要数(幅1.5)] + [マス用カラム×総スロット数]
-        cols = st.columns([3.5, 1.2] + [1] * total_slots)
+        cols = st.columns([2.2, 0.8] + [1] * 15)
         
         with cols[0]:
-            st.write(f"**{item_name}**")
+            st.markdown(f"<div style='font-size:0.85rem; font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'>{item_name}</div>", unsafe_allow_html=True)
         with cols[1]:
-            st.caption(f"必要:{need_count}")
+            st.markdown(f"<div style='font-size:0.75rem; color:#666;'>必要:{need_count}</div>", unsafe_allow_html=True)
             
-        # 必要な数だけチェックボックスを置き、残りは空欄（プレースホルダー）にする
-        for i in range(total_slots):
+        for i in range(15):
             with cols[2 + i]:
                 if i < need_count:
                     key = f"{title}_{item_name}_{i}"
                     st.checkbox("", key=key, label_visibility="collapsed")
                 else:
-                    # 必要数を超えたマスは薄く非活性っぽくするか空白にする
                     st.write("")
     st.divider()
 
 # ==========================================
-# 1. 保存・治療科 (最大15マス)
+# 1. 保存・治療科
 # ==========================================
 hozon_items = [
     ("覆髄法", 2),
@@ -80,16 +95,16 @@ hozon_items = [
     ("マイクロの使用", 2),
     ("歯周外科症例見学", 2),
 ]
-render_table_section("保存・治療科", hozon_items, total_slots=15)
+render_html_table("保存・治療科", hozon_items)
 
 # ==========================================
-# 2. 第一・第二口腔外科 (最大3マス)
+# 2. 第一・第二口腔外科
 # ==========================================
-render_table_section("第一口腔外科", [("抜歯症例", 2), ("外科外来症例", 2), ("入院患者症例", 2)], total_slots=3)
-render_table_section("第二口腔外科", [("抜歯症例", 2), ("外科外来症例", 3), ("入院患者症例", 1)], total_slots=3)
+render_html_table("第一口腔外科", [("抜歯症例", 2), ("外科外来症例", 2), ("入院患者症例", 2)])
+render_html_table("第二口腔外科", [("抜歯症例", 2), ("外科外来症例", 3), ("入院患者症例", 1)])
 
 # ==========================================
-# 3. 口腔補綴科 (最大11マス)
+# 3. 口腔補綴科
 # ==========================================
 hotetsu_items = [
     ("医療面接", 3), ("資料獲得", 3), ("診断・カウンセリング", 3),
@@ -99,10 +114,10 @@ hotetsu_items = [
     ("その他・受付・余剰分", 11), ("補綴難処置", 1),
     ("TMD症例", 1), ("インプラント症例", 1), ("デジタルデンティストリ", 1),
 ]
-render_table_section("口腔補綴科", hotetsu_items, total_slots=11)
+render_html_table("口腔補綴科", hotetsu_items)
 
 # ==========================================
-# 4. 咀嚼補綴科 (最大3マス)
+# 4. 咀嚼補綴科
 # ==========================================
 st.subheader("★ 咀嚼補綴科")
 soshaku_items = [
@@ -114,14 +129,14 @@ soshaku_items = [
     ("リコール", 2, ""), ("専門外来(顎顔面補綴)", 1, ""),
 ]
 for item_name, need_count, note in soshaku_items:
-    cols = st.columns([3, 1, 1.2] + [1] * 3)
+    cols = st.columns([2.0, 0.8, 0.9] + [1] * 3)
     with cols[0]:
-        st.write(f"**{item_name}**")
+        st.markdown(f"<div style='font-size:0.85rem; font-weight:bold;'>{item_name}</div>", unsafe_allow_html=True)
     with cols[1]:
-        st.caption(f"必要:{need_count}")
+        st.markdown(f"<div style='font-size:0.75rem; color:#666;'>必要:{need_count}</div>", unsafe_allow_html=True)
     with cols[2]:
         if note:
-            st.caption(f"({note})")
+            st.markdown(f"<div style='font-size:0.75rem; color:#c62828;'>({note})</div>", unsafe_allow_html=True)
     for i in range(3):
         with cols[3 + i]:
             if i < need_count:
@@ -129,9 +144,9 @@ for item_name, need_count, note in soshaku_items:
 st.divider()
 
 # ==========================================
-# 5. 予防歯科 (最大5マス)
+# 5. 予防歯科
 # ==========================================
-render_table_section("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)], total_slots=5)
+render_html_table("予防歯科", [("見学実習(10-1月)", 2), ("当番(2-10月)", 5)])
 
 # ==========================================
 # 6. 小児歯科
@@ -145,14 +160,14 @@ shoni_sections = [
     ("外科処置・抜歯", [("12月まで", 2), ("3月まで", 3), ("6月まで", 3), ("8月まで", 2)]),
 ]
 for sub_title, sub_items in shoni_sections:
-    st.write(f"・**【{sub_title}】**")
+    st.markdown(f"<div style='font-size:0.9rem; font-weight:bold; margin-top:4px;'>・【{sub_title}】</div>", unsafe_allow_html=True)
     for period, need_count in sub_items:
-        cols = st.columns([3, 1.2] + [1] * 3)
+        cols = st.columns([2.2, 0.8] + [1] * 5)
         with cols[0]:
-            st.write(f" {period}")
+            st.markdown(f"<div style='font-size:0.85rem; padding-left:10px;'>{period}</div>", unsafe_allow_html=True)
         with cols[1]:
-            st.caption(f"必要:{need_count}")
-        for i in range(3):
+            st.markdown(f"<div style='font-size:0.75rem; color:#666;'>必要:{need_count}</div>", unsafe_allow_html=True)
+        for i in range(5):
             with cols[2 + i]:
                 if i < need_count:
                     st.checkbox("", key=f"小児歯科_{sub_title}_{period}_{i}", label_visibility="collapsed")
@@ -163,17 +178,17 @@ st.divider()
 # ==========================================
 st.subheader("★ 放射線科")
 for item_name, need_count in [("口内法スケッチ", 5), ("口外法スケッチ", 5), ("口外法スケッチ(CT/MRI)", 5), ("口内法デンタル撮影", 10)]:
-    cols = st.columns([3, 1.2] + [1] * 10)
+    cols = st.columns([2.2, 0.8] + [1] * 10)
     with cols[0]:
-        st.write(f"**{item_name}**")
+        st.markdown(f"<div style='font-size:0.85rem; font-weight:bold;'>{item_name}</div>", unsafe_allow_html=True)
     with cols[1]:
-        st.caption(f"必要:{need_count}")
+        st.markdown(f"<div style='font-size:0.75rem; color:#666;'>必要:{need_count}</div>", unsafe_allow_html=True)
     for i in range(10):
         with cols[2 + i]:
             if i < need_count:
                 st.checkbox("", key=f"放射線科_{item_name}_{i}", label_visibility="collapsed")
 
-st.write("・**撮影見学**")
+st.markdown("<div style='font-size:0.85rem; font-weight:bold; margin-top:6px;'>・撮影見学</div>", unsafe_allow_html=True)
 kengaku_list = ["パノラマXp", "セファロ", "顎関節", "頭頸部", "MBCT", "CBCT", "MRI顎関節", "MRI頭頸部", "放射線治療"]
 kengaku_cols = st.columns(3)
 for idx, name in enumerate(kengaku_list):
@@ -184,20 +199,20 @@ st.divider()
 # ==========================================
 # 8. その他各科・当番系
 # ==========================================
-render_table_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], total_slots=3)
-render_table_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], total_slots=10)
-render_table_section("障害者歯科", [("見学", 5)], total_slots=5)
-render_table_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], total_slots=3)
+render_html_table("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)])
+render_html_table("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)])
+render_html_table("障害者歯科", [("見学", 5)])
+render_html_table("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)])
 
 st.subheader("★ 当番・研修関連")
-st.write("・**検査部**（1回）")
+st.markdown("<div style='font-size:0.85rem;'>・<b>検査部</b>（1回）</div>", unsafe_allow_html=True)
 st.checkbox("検査部完了", key="toban_kensa")
-st.write("・**口腔総合診療部**（7回）")
+st.markdown("<div style='font-size:0.85rem;'>・<b>口腔総合診療部</b>（7回）</div>", unsafe_allow_html=True)
 sogou_cols = st.columns(7)
 for i in range(7):
     with sogou_cols[i]:
         st.checkbox(f"{i+1}回", key=f"toban_sougou_{i}")
-st.write("・**医学部病院**（2回）")
+st.markdown("<div style='font-size:0.85rem;'>・<b>医学部病院</b>（2回）</div>", unsafe_allow_html=True)
 med_cols = st.columns(2)
 for i in range(2):
     with med_cols[i]:
