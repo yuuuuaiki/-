@@ -113,7 +113,6 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
         if cell:
             sh.update_cell(cell.row, 2, val_str)
         else:
-            # 初回データがない場合はヘッダーを追加しておく
             try:
                 if not sh.row_values(1):
                     sh.append_row(["key", "val"])
@@ -276,4 +275,11 @@ toban_items = [
 for label, count, prefix in toban_items:
     st.markdown(f"・**{label}**")
     cols = st.columns(max(count, 1))
-    for i in range(count
+    for i in range(count):
+        key = f"{prefix}_{i}"
+        is_checked = st.session_state.checks.get(key, False)
+        with cols[i]:
+            new_val = st.checkbox(f"{i+1}回", key=key, value=is_checked)
+            if new_val != is_checked:
+                st.session_state.checks[key] = new_val
+                save_key_to_sheet(key, new_val)
