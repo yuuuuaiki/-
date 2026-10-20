@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="見学ケース必要項目数チェック", layout="wide")
 
-# 余白をスッキリさせ、クリックした文字に変化をつけやすくするCSS
+# 余白をスッキリさせ、コンパクトに表示するCSS
 st.markdown("""
     <style>
     .block-container {
@@ -53,6 +53,10 @@ st.markdown("""
     .empty-cell {
         background-color: #eaeaea;
     }
+    .header-row {
+        background-color: #f1f3f4;
+        font-weight: bold;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -73,16 +77,21 @@ def render_html_section(title, items, max_cols=15):
     for row in items:
         item_name = row[0]
         need_count = row[1]
+        is_header = row[2] if len(row) > 2 else False
         
-        html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
-        for i in range(max_cols):
-            if i < need_count:
-                key = f"{title}_{item_name}_{i}"
-                checked = "checked" if st.session_state.checks.get(key, False) else ""
-                html += f'<td><input type="checkbox" name="{key}" {checked} onchange="this.form.submit()"></td>'
-            else:
-                html += '<td class="empty-cell"></td>'
-        html += '</tr>'
+        if is_header:
+            # マス無しの見出し行（CR修復のグループ名など）
+            html += f'<tr class="header-row"><td colspan="{max_cols + 2}"><b>{item_name}</b></td></tr>'
+        else:
+            html += f'<tr><td>{item_name}</td><td>{need_count}</td>'
+            for i in range(max_cols):
+                if i < need_count:
+                    key = f"{title}_{item_name}_{i}"
+                    checked = "checked" if st.session_state.checks.get(key, False) else ""
+                    html += f'<td><input type="checkbox" name="{key}" {checked} onchange="this.form.submit()"></td>'
+                else:
+                    html += '<td class="empty-cell"></td>'
+            html += '</tr>'
     
     html += '</table></div>'
     st.markdown(html, unsafe_allow_html=True)
@@ -90,12 +99,13 @@ def render_html_section(title, items, max_cols=15):
 with st.form("check_form"):
     
     # ==========================================
-    # 1. 保存・治療科（CR修復の全体15マスを削除し内訳のみに）
+    # 1. 保存・治療科（CR修復を全体見出しとして追加、内訳にそれぞれ必要数を持たせる）
     # ==========================================
     hozon_items = [
         ("覆髄法", 2), 
         ("抜髄法", 2), 
         ("感染根管治療", 5), 
+        ("★ CR修復 (合計15点)", 0, True),  # マス無しの見出し行
         (" └ 2級窩洞以外", 13),
         (" └ 2級窩洞", 2),
         ("インレー修復", 2),
@@ -125,7 +135,7 @@ with st.form("check_form"):
     render_html_section("口腔補綴科", hotetsu_items, max_cols=11)
 
     # ==========================================
-    # 4. 咀嚼補綴科（F・Pはそれぞれ1つずつで計2マスに）
+    # 4. 咀嚼補綴科（専門外来のカッコを顎顔面補綴、口唇口蓋裂に変更）
     # ==========================================
     soshaku_items = [
         ("口腔内検査・概形印象 (F)", 1), ("口腔内検査・概形印象 (P)", 1),
@@ -139,7 +149,7 @@ with st.form("check_form"):
         ("支台装置・義歯試適 (P)", 1),
         ("義歯修理・リライン(各1必須)", 3),
         ("リコール", 2),
-        ("専門外来(顎顔面補綴)", 1),
+        ("専門外来 (顎顔面補綴、口唇口蓋裂)", 1),
     ]
     render_html_section("咀嚼補綴科", soshaku_items, max_cols=3)
 
@@ -161,7 +171,7 @@ with st.form("check_form"):
     render_html_section("小児歯科", shoni_items, max_cols=5)
 
     # ==========================================
-    # 7. 放射線科（撮影見学を追加し、文字クリックでチェックできるように）
+    # 7. 放射線科
     # ==========================================
     houshasen_items = [
         ("口内法スケッチ", 5), ("口外法スケッチ", 5),
@@ -177,15 +187,11 @@ with st.form("check_form"):
         "MBCT", "CBCT", "MRI 顎関節", "MRI 頭頸部", "放射線治療"
     ]
     
-    # 3列に並べて、文字（ラベル付きチェックボックス）で直感的に押せるようにする
     k_cols = st.columns(3)
     for idx, name in enumerate(kengaku_list):
         with k_cols[idx % 3]:
             key = f"放射線科_撮影見学_{name}"
-            checked = st.session_state.checks.get(key, False)
-            # 文字をタップしてチェックON/OFFできるようにする
             new_val = st.checkbox(name, key=key)
-            # チェックが入ったら文字色が変わるようなスタイルを適用
             if new_val:
                 st.markdown(f"<style>div[data-testid='stCheckbox'] label span {{ color: #1565c0; font-weight: bold; }}</style>", unsafe_allow_html=True)
 
