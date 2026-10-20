@@ -81,18 +81,21 @@ def get_gspread_client():
         return None
 
 def load_data_from_sheet(sheet_name="見学ケースデータ"):
+    data = {}
     client = get_gspread_client()
     if not client:
-        return {}
+        return data
     try:
         sh = client.open(sheet_name).sheet1
         records = sh.get_all_records()
-        data = {}
         for row in records:
-            data[row["key"]] = row["val"] == 1 or row["val"] == "1"
-        return data
+            k = row.get("key")
+            v = row.get("val")
+            if k:
+                data[k] = (v == 1 or v == "1" or v is True)
     except Exception:
-        return {}
+        pass
+    return data
 
 def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
     client = get_gspread_client()
@@ -100,11 +103,22 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
         return
     try:
         sh = client.open(sheet_name).sheet1
-        cell = sh.find(key)
         val_str = "1" if value else "0"
+        cell = None
+        try:
+            cell = sh.find(key)
+        except Exception:
+            pass
+            
         if cell:
             sh.update_cell(cell.row, 2, val_str)
         else:
+            # 初回データがない場合はヘッダーを追加しておく
+            try:
+                if not sh.row_values(1):
+                    sh.append_row(["key", "val"])
+            except Exception:
+                pass
             sh.append_row([key, val_str])
     except Exception:
         pass
@@ -113,7 +127,7 @@ def save_key_to_sheet(key, value, sheet_name="見学ケースデータ"):
 if "checks" not in st.session_state:
     st.session_state.checks = load_data_from_sheet()
 
-# チェックボックス変更時のクエリパラメータ連携
+# クエリパラメータによる自動保存の受け取り処理
 if "submitted_key" in st.query_params:
     changed_key = st.query_params["submitted_key"]
     new_val = st.query_params.get(changed_key) == "1"
@@ -247,3 +261,19 @@ for idx, name in enumerate(kengaku_list):
 
 # ==========================================
 # 8. その他各科・当番系
+# ==========================================
+render_html_section("歯科麻酔科", [("入院患者全身麻酔", 1), ("精神鎮静法", 1), ("ペインクリニック", 1)], max_cols=3)
+render_html_section("顎口腔機能治療部", [("見学", 10), ("ドライマウスdisc.", 1), ("嚥下disc.", 1), ("SASdisc.", 1), ("発音・構音disc.", 1)], max_cols=10)
+render_html_section("障害者歯科", [("見学", 5)], max_cols=5)
+render_html_section("矯正科", [("配当", 3), ("EW以外の装置", 2), ("EW見学", 1)], max_cols=3)
+
+st.markdown("### ★ 当番・研修関連")
+toban_items = [
+    ("検査部（1回）", 1, "toban_kensa"),
+    ("口腔総合診療部（7回）", 7, "toban_sougou"),
+    ("医学部病院（2回）", 2, "toban_med")
+]
+for label, count, prefix in toban_items:
+    st.markdown(f"・**{label}**")
+    cols = st.columns(max(count, 1))
+    for i in range(count
