@@ -91,6 +91,7 @@ st.markdown("""
 
 # --- Google スプレッドシート連携処理 ---
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+TARGET_SHEET_NAME = "症例管理データ"  # 前作のシート名に修正
 
 @st.cache_resource
 def get_gspread_client():
@@ -103,7 +104,7 @@ def get_gspread_client():
     except Exception:
         return None
 
-def load_data_from_sheet(sheet_name="見学ケースデータ"):
+def load_data_from_sheet(sheet_name=TARGET_SHEET_NAME):
     data = {}
     client = get_gspread_client()
     if not client:
@@ -120,28 +121,12 @@ def load_data_from_sheet(sheet_name="見学ケースデータ"):
         pass
     return data
 
-def save_all_to_sheet(checks_dict, sheet_name="見学ケースデータ"):
+def save_all_to_sheet(checks_dict, sheet_name=TARGET_SHEET_NAME):
     client = get_gspread_client()
     if not client:
         return
     try:
         sh = client.open(sheet_name).sheet1
-        # スプレッドシートの既存データを一括取得または更新
-        existing_records = sh.get_all_records()
-        existing_keys = {row["key"]: row for row in existing_records}
-        
-        updates = []
-        appends = []
-        
-        for k, v in checks_dict.items():
-            val_str = "1" if v else "0"
-            if k in existing_keys:
-                # 既存行の更新 (行番号を特定して更新)
-                # gspreadのfindでセルを探す
-                pass
-        
-        # 確実かつシンプルに全クリアして書き直すか、個別更新する
-        # ここでは安全に既存の表を更新・追加する方式
         for k, v in checks_dict.items():
             val_str = "1" if v else "0"
             cell = None
@@ -239,9 +224,9 @@ if "form_submitted" in st.query_params:
     st.session_state.checks = new_checks
     save_all_to_sheet(new_checks)
     st.query_params.clear()
-    st.success("✨ すべての変更をスプレッドシートに保存しました！")
+    st.success("✨ 症例管理データに保存しました！")
 
-# HTMLフォームの開始（全体をラップして保存ボタンを機能させる）
+# HTMLフォームの開始
 html_content = '<form method="get">'
 html_content += '<input type="hidden" name="form_submitted" value="1">'
 html_content += '<div class="save-bar"><span>📋 見学ケース必要項目数早見表</span><input type="submit" class="save-btn" value="💾 変更を保存する"></div>'
