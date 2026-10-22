@@ -139,7 +139,7 @@ component_html = """
 <div id="app"></div>
 
 <script>
-const sections = """ + sections_json + """;
+const sections = __SECTIONS_JSON__;
 
 function render() {
     let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{}');
@@ -151,4 +151,62 @@ function render() {
         else if (title === "口腔補綴科") max_cols = 11;
         else if (["咀嚼補綴科", "歯科麻酔科", "矯正科"].includes(title)) max_cols = 3;
         else if (["放射線科", "顎口腔機能治療部"].includes(title)) max_cols = 10;
-        else if (title === "放射線科
+        else if (title === "放射線科：撮影見学") max_cols = 9;
+        else if (title === "当番・研修関連") max_cols = 7;
+
+        html += '<h3>★ ' + title + '</h3>';
+        html += '<div class="table-scroll"><table class="custom-table">';
+        html += '<tr><th>項目</th><th>必要</th>';
+        for (let i = 0; i < max_cols; i++) {
+            html += '<th>' + (i + 1) + '</th>';
+        }
+        html += '</tr>';
+
+        for (const row of items) {
+            const itemName = row[0];
+            const needCount = row[1];
+            const isHeader = row[2] || false;
+
+            if (isHeader) {
+                html += '<tr class="header-row"><td colspan="' + (max_cols + 2) + '"><b>' + itemName + '</b></td></tr>';
+            } else {
+                html += '<tr><td>' + itemName + '</td><td>' + needCount + '</td>';
+                for (let i = 0; i < max_cols; i++) {
+                    if (i < needCount) {
+                        const key = title + '_' + itemName + '_' + i;
+                        const safeKey = key.replace(/\\s+/g, '_').replace(/['"]+/g, '');
+                        const isChecked = saved[safeKey] ? 'checked' : '';
+                        html += '<td><input type="checkbox" data-key="' + safeKey + '" ' + isChecked + ' onchange="updateCheck(this)"></td>';
+                    } else {
+                        html += '<td class="empty-cell"></td>';
+                    }
+                }
+                html += '</tr>';
+            }
+        }
+        html += '</table></div>';
+    }
+
+    document.getElementById('app').innerHTML = html;
+}
+
+function updateCheck(el) {
+    let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{}');
+    const key = el.getAttribute('data-key');
+    if (el.checked) {
+        saved[key] = true;
+    } else {
+        delete saved[key];
+    }
+    localStorage.setItem('kengaku_data_v2', JSON.stringify(saved));
+}
+
+window.onload = render;
+</script>
+</body>
+</html>
+"""
+
+component_html = component_html.replace("__SECTIONS_JSON__", sections_json)
+
+st.components.v1.html(component_html, height=2400, scrolling=True)
