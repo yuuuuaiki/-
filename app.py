@@ -118,7 +118,6 @@ SECTIONS = {
     "当番・研修関連": [("検査部", 1), ("口腔総合診療部", 7), ("医学部病院", 2)]
 }
 
-# Pythonのf文字列や変数展開によるエラーを完全に避けるため、安全な文字列結合を使用
 sections_json = json.dumps(SECTIONS, ensure_ascii=False)
 
 component_html = """
@@ -130,4 +129,82 @@ component_html = """
     .custom-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-family: sans-serif; }
     .custom-table th, .custom-table td { border: 1px solid #999; padding: 3px 5px; text-align: center; white-space: nowrap; height: 24px; }
     .custom-table th:first-child, .custom-table td:first-child { text-align: left; font-weight: bold; background-color: #f7f7f7; min-width: 160px; }
-    .custom-table th:nth-child(2), .custom-table td:nth-child(2) { text-align: center; background-color: #f7f7f7; min-width: 50px; font-size:
+    .custom-table th:nth-child(2), .custom-table td:nth-child(2) { text-align: center; background-color: #f7f7f7; min-width: 50px; font-size: 0.75rem; color: #555; }
+    .empty-cell { background-color: #eaeaea; }
+    .header-row { background-color: #f1f3f4; font-weight: bold; text-align: left !important; padding-left: 8px !important; }
+    h3 { margin-top: 0.4rem !important; margin-bottom: 0.1rem !important; font-size: 0.95rem !important; color: #111; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const sections = """ + sections_json + """;
+
+function render() {
+    let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{}');
+    let html = '';
+
+    for (const [title, items] of Object.entries(sections)) {
+        let max_cols = 15;
+        if (["第一口腔外科", "第二口腔外科", "予防歯科", "小児歯科", "障害者歯科"].includes(title)) max_cols = 5;
+        else if (title === "口腔補綴科") max_cols = 11;
+        else if (["咀嚼補綴科", "歯科麻酔科", "矯正科"].includes(title)) max_cols = 3;
+        else if (["放射線科", "顎口腔機能治療部"].includes(title)) max_cols = 10;
+        else if (title === "放射線科：撮影見学") max_cols = 9;
+        else if (title === "当番・研修関連") max_cols = 7;
+
+        html += '<h3>★ ' + title + '</h3>';
+        html += '<div class="table-scroll"><table class="custom-table">';
+        html += '<tr><th>項目</th><th>必要</th>';
+        for (let i = 0; i < max_cols; i++) {
+            html += '<th>' + (i + 1) + '</th>';
+        }
+        html += '</tr>';
+
+        for (const row of items) {
+            const itemName = row[0];
+            const needCount = row[1];
+            const isHeader = row[2] || false;
+
+            if (isHeader) {
+                html += '<tr class="header-row"><td colspan="' + (max_cols + 2) + '"><b>' + itemName + '</b></td></tr>';
+            } else {
+                html += '<tr><td>' + itemName + '</td><td>' + needCount + '</td>';
+                for (let i = 0; i < max_cols; i++) {
+                    if (i < needCount) {
+                        const key = title + '_' + itemName + '_' + i;
+                        const safeKey = key.replace(/\\s+/g, '_').replace(/['"]+/g, '');
+                        const isChecked = saved[safeKey] ? 'checked' : '';
+                        html += '<td><input type="checkbox" data-key="' + safeKey + '" ' + isChecked + ' onchange="updateCheck(this)"></td>';
+                    } else {
+                        html += '<td class="empty-cell"></td>';
+                    }
+                }
+                html += '</tr>';
+            }
+        }
+        html += '</table></div>';
+    }
+
+    document.getElementById('app').innerHTML = html;
+}
+
+function updateCheck(el) {
+    let saved = JSON.parse(localStorage.getItem('kengaku_data_v2') || '{}');
+    const key = el.getAttribute('data-key');
+    if (el.checked) {
+        saved[key] = true;
+    } else {
+        delete saved[key];
+    }
+    localStorage.setItem('kengaku_data_v2', JSON.stringify(saved));
+}
+
+window.onload = render;
+</script>
+</body>
+</html>
+"""
+
+st.components.v1.html(component_html, height=2400, scrolling=True)
